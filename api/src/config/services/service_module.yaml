@@ -1,0 +1,5 @@
+services:
+    App\Service\Infrastructure\Persistence\Doctrine\DoctrineServiceRepository: ~
+
+    App\Service\Domain\ServiceRepositoryInterface:
+        alias: App\Service\Infrastructure\Persistence\Doctrine\DoctrineServiceRepository
