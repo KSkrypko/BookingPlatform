@@ -1,0 +1,5 @@
+services:
+    App\Booking\Infrastructure\Persistence\Doctrine\DoctrineBookingRepository: ~
+
+    App\Booking\Domain\BookingRepositoryInterface:
+        alias: App\Booking\Infrastructure\Persistence\Doctrine\DoctrineBookingRepository
