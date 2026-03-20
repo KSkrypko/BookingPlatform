@@ -48,15 +48,6 @@ php bin/console doctrine:schema:update --force
 php -S 127.0.0.1:8000 -t public
 ```
 
-### Seed example services
-
-```sql
-INSERT INTO services (name, price, duration_minutes, created_at, is_active) VALUES
-('Haircut', 100, 30, NOW(), true),
-('Massage', 200, 60, NOW(), true),
-('Consultation', 50, 15, NOW(), true);
-```
-
 ### Frontend
 
 ```bash
@@ -82,18 +73,3 @@ http://localhost:5173
 Frontend (React) communicates with Symfony API using HTTP requests.
 Backend handles business logic and database operations with Doctrine ORM.
 PostgreSQL runs in Docker with persistent volumes.
-
-
-## 🚨 Challenges & Solutions
-
-* CORS issue → solved with `nelmio/cors-bundle`
-* Database connection errors → fixed Docker + environment configuration
-* Data loss after container restart → resolved using Docker volumes
-* Form validation conflicts → implemented custom validation instead of browser defaults
-
-
-## 📌 Future Improvements
-
-* Authentication (login/register)
-* Edit/delete bookings
-* UI improvements (toasts, loaders)

@@ -19,6 +19,13 @@ type Booking = {
   createdAt: string;
 };
 
+type FormErrors = {
+  serviceId?: string;
+  customerName?: string;
+  customerEmail?: string;
+  bookingDate?: string;
+};
+
 const API_BASE_URL = 'http://localhost:8000/api';
 
 function App() {
@@ -33,6 +40,7 @@ function App() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
 
   const fetchServices = async () => {
     try {
@@ -79,13 +87,44 @@ function App() {
     void fetchBookings();
   }, []);
 
+  const validateForm = (): FormErrors => {
+    const errors: FormErrors = {};
+    const trimmedCustomerName = customerName.trim();
+    const trimmedCustomerEmail = customerEmail.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!serviceId) {
+      errors.serviceId = 'Wybierz usługę.';
+    }
+
+    if (!trimmedCustomerName) {
+      errors.customerName = 'Podaj imię i nazwisko.';
+    } else if (trimmedCustomerName.length < 2) {
+      errors.customerName = 'Imię i nazwisko musi mieć co najmniej 2 znaki.';
+    }
+
+    if (!trimmedCustomerEmail) {
+      errors.customerEmail = 'Podaj adres email.';
+    } else if (!emailRegex.test(trimmedCustomerEmail)) {
+      errors.customerEmail = 'Podaj poprawny adres email.';
+    }
+
+    if (!bookingDate) {
+      errors.bookingDate = 'Wybierz termin rezerwacji.';
+    }
+
+    return errors;
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
 
-    if (!serviceId || !customerName || !customerEmail || !bookingDate) {
-      setErrorMessage('Uzupełnij wszystkie pola formularza.');
+    const errors = validateForm();
+    setFormErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
@@ -99,8 +138,8 @@ function App() {
         },
         body: JSON.stringify({
           serviceId: Number(serviceId),
-          customerName,
-          customerEmail,
+          customerName: customerName.trim(),
+          customerEmail: customerEmail.trim(),
           bookingDate,
         }),
       });
@@ -115,6 +154,7 @@ function App() {
       setCustomerName('');
       setCustomerEmail('');
       setBookingDate('');
+      setFormErrors({});
 
       await fetchBookings();
     } catch (error) {
@@ -159,10 +199,17 @@ function App() {
         <section className="card">
           <h2>Nowa rezerwacja</h2>
 
-          <form onSubmit={handleSubmit} className="booking-form">
+          <form onSubmit={handleSubmit} className="booking-form" noValidate>
             <label>
               Usługa
-              <select value={serviceId} onChange={(event) => setServiceId(event.target.value)}>
+              <select
+                value={serviceId}
+                onChange={(event) => {
+                  setServiceId(event.target.value);
+                  setFormErrors((prev) => ({ ...prev, serviceId: undefined }));
+                }}
+                className={formErrors.serviceId ? 'input-error' : ''}
+              >
                 <option value="">Wybierz usługę</option>
                 {services.map((service) => (
                   <option key={service.id} value={service.id}>
@@ -170,6 +217,7 @@ function App() {
                   </option>
                 ))}
               </select>
+              {formErrors.serviceId && <span className="field-error">{formErrors.serviceId}</span>}
             </label>
 
             <label>
@@ -177,19 +225,29 @@ function App() {
               <input
                 type="text"
                 value={customerName}
-                onChange={(event) => setCustomerName(event.target.value)}
-                placeholder="Np. Anna Nowak"
+                onChange={(event) => {
+                  setCustomerName(event.target.value);
+                  setFormErrors((prev) => ({ ...prev, customerName: undefined }));
+                }}
+                placeholder="Np. Jan Kowalski"
+                className={formErrors.customerName ? 'input-error' : ''}
               />
+              {formErrors.customerName && <span className="field-error">{formErrors.customerName}</span>}
             </label>
 
             <label>
               Email
               <input
-                type="email"
+                type="text"
                 value={customerEmail}
-                onChange={(event) => setCustomerEmail(event.target.value)}
-                placeholder="Np. anna@example.com"
+                onChange={(event) => {
+                  setCustomerEmail(event.target.value);
+                  setFormErrors((prev) => ({ ...prev, customerEmail: undefined }));
+                }}
+                placeholder="Np. jan.kowalski@example.com"
+                className={formErrors.customerEmail ? 'input-error' : ''}
               />
+              {formErrors.customerEmail && <span className="field-error">{formErrors.customerEmail}</span>}
             </label>
 
             <label>
@@ -197,8 +255,13 @@ function App() {
               <input
                 type="datetime-local"
                 value={bookingDate}
-                onChange={(event) => setBookingDate(event.target.value)}
+                onChange={(event) => {
+                  setBookingDate(event.target.value);
+                  setFormErrors((prev) => ({ ...prev, bookingDate: undefined }));
+                }}
+                className={formErrors.bookingDate ? 'input-error' : ''}
               />
+              {formErrors.bookingDate && <span className="field-error">{formErrors.bookingDate}</span>}
             </label>
 
             <button type="submit" disabled={submitting}>
