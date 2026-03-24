@@ -1,11 +1,32 @@
-
 services:
-###> doctrine/doctrine-bundle ###
+  php:
+    build:
+      context: .
+      dockerfile: .docker/php/Dockerfile
+    container_name: booking-api-php
+    working_dir: /var/www/app
+    volumes:
+      - ./:/var/www/app
+    depends_on:
+      database:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    container_name: booking-api-nginx
+    ports:
+      - "8000:80"
+    volumes:
+      - ./:/var/www/app
+      - ./.docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - php
+
   database:
     image: postgres:${POSTGRES_VERSION:-16}-alpine
+    container_name: booking-api-database
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app}
-      # You should definitely change the password in production
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-!ChangeMe!}
       POSTGRES_USER: ${POSTGRES_USER:-app}
     healthcheck:
@@ -13,13 +34,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+    ports:
+      - "5433:5432"
     volumes:
       - database_data:/var/lib/postgresql/data:rw
-      # You may use a bind-mounted host directory instead, so that it is harder to accidentally remove the volume and lose all your data!
-      # - ./docker/db/data:/var/lib/postgresql/data:rw
-###< doctrine/doctrine-bundle ###
 
 volumes:
-###> doctrine/doctrine-bundle ###
   database_data:
-###< doctrine/doctrine-bundle ###

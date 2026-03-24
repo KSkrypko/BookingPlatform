@@ -1,37 +1,17 @@
 import { useEffect, useState } from 'react';
 import './App.css';
-
-type Service = {
-  id: number;
-  name: string;
-  description: string | null;
-  price: string;
-  durationMinutes: number;
-  createdAt: string;
-};
-
-type Booking = {
-  id: number;
-  serviceId: number;
-  customerName: string;
-  customerEmail: string;
-  bookingDate: string;
-  createdAt: string;
-};
-
-type FormErrors = {
-  serviceId?: string;
-  customerName?: string;
-  customerEmail?: string;
-  bookingDate?: string;
-};
-
-const API_BASE_URL = 'http://localhost:8000/api';
+import BookingForm from './components/BookingForm';
+import BookingList from './components/BookingList';
+import Message from './components/Message';
+import ServiceList from './components/ServiceList';
+import { createBooking, getBookings, getServices } from './lib/api';
+import type { Booking, FormErrors } from './types/booking';
+import type { Service } from './types/service';
 
 function App() {
   const [services, setServices] = useState<Service[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [serviceId, setServiceId] = useState<string>('');
+  const [serviceId, setServiceId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
   const [bookingDate, setBookingDate] = useState('');
@@ -42,50 +22,43 @@ function App() {
   const [successMessage, setSuccessMessage] = useState('');
   const [formErrors, setFormErrors] = useState<FormErrors>({});
 
-  const fetchServices = async () => {
-    try {
-      setLoadingServices(true);
-      const response = await fetch(`${API_BASE_URL}/services`);
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setErrorMessage('');
+        setLoadingServices(true);
+        setLoadingBookings(true);
 
-      if (!response.ok) {
-        throw new Error('Nie udało się pobrać usług.');
+        const [servicesData, bookingsData] = await Promise.all([getServices(), getBookings()]);
+
+        setServices(servicesData);
+        setBookings(bookingsData);
+
+        if (servicesData.length > 0) {
+          setServiceId((currentValue) => currentValue || String(servicesData[0].id));
+        }
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Wystąpił nieznany błąd.');
+      } finally {
+        setLoadingServices(false);
+        setLoadingBookings(false);
       }
+    };
 
-      const data: Service[] = await response.json();
-      setServices(data);
+    void loadData();
+  }, []);
 
-      if (data.length > 0 && serviceId === '') {
-        setServiceId(String(data[0].id));
-      }
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Wystąpił nieznany błąd.');
-    } finally {
-      setLoadingServices(false);
-    }
-  };
-
-  const fetchBookings = async () => {
+  const loadBookings = async () => {
     try {
       setLoadingBookings(true);
-      const response = await fetch(`${API_BASE_URL}/bookings`);
-
-      if (!response.ok) {
-        throw new Error('Nie udało się pobrać rezerwacji.');
-      }
-
-      const data: Booking[] = await response.json();
-      setBookings(data);
+      const bookingsData = await getBookings();
+      setBookings(bookingsData);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Wystąpił nieznany błąd.');
+      setErrorMessage(error instanceof Error ? error.message : 'Nie udało się pobrać rezerwacji.');
     } finally {
       setLoadingBookings(false);
     }
   };
-
-  useEffect(() => {
-    void fetchServices();
-    void fetchBookings();
-  }, []);
 
   const validateForm = (): FormErrors => {
     const errors: FormErrors = {};
@@ -116,8 +89,23 @@ function App() {
     return errors;
   };
 
+  const clearFieldError = (field: keyof FormErrors) => {
+    setFormErrors((prev) => ({
+      ...prev,
+      [field]: undefined,
+    }));
+  };
+
+  const resetForm = () => {
+    setCustomerName('');
+    setCustomerEmail('');
+    setBookingDate('');
+    setFormErrors({});
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
     setErrorMessage('');
     setSuccessMessage('');
 
@@ -131,32 +119,16 @@ function App() {
     try {
       setSubmitting(true);
 
-      const response = await fetch(`${API_BASE_URL}/bookings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          serviceId: Number(serviceId),
-          customerName: customerName.trim(),
-          customerEmail: customerEmail.trim(),
-          bookingDate,
-        }),
+      await createBooking({
+        serviceId: Number(serviceId),
+        customerName: customerName.trim(),
+        customerEmail: customerEmail.trim(),
+        bookingDate,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message ?? 'Nie udało się utworzyć rezerwacji.');
-      }
-
       setSuccessMessage('Rezerwacja została utworzona.');
-      setCustomerName('');
-      setCustomerEmail('');
-      setBookingDate('');
-      setFormErrors({});
-
-      await fetchBookings();
+      resetForm();
+      await loadBookings();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Wystąpił nieznany błąd.');
     } finally {
@@ -167,130 +139,67 @@ function App() {
   return (
     <div className="app">
       <div className="container">
-        <header className="header">
-          <h1>BookingPlatform</h1>
-          <p>Frontend połączony z API Symfony</p>
+        <header className="hero">
+          <div className="hero__content">
+            <h1>Booking Platform</h1>
+          </div>
         </header>
 
-        {errorMessage && <div className="message error">{errorMessage}</div>}
-        {successMessage && <div className="message success">{successMessage}</div>}
+        {errorMessage && <Message type="error">{errorMessage}</Message>}
+        {successMessage && <Message type="success">{successMessage}</Message>}
 
-        <section className="card">
-          <h2>Dostępne usługi</h2>
-
-          {loadingServices ? (
-            <p>Ładowanie usług...</p>
-          ) : services.length === 0 ? (
-            <p>Brak usług do wyświetlenia.</p>
-          ) : (
-            <div className="services-list">
-              {services.map((service) => (
-                <div key={service.id} className="service-item">
-                  <h3>{service.name}</h3>
-                  <p>Cena: {service.price} PLN</p>
-                  <p>Czas trwania: {service.durationMinutes} min</p>
-                  <p>{service.description ?? 'Brak opisu'}</p>
-                </div>
-              ))}
+        <div className="content-grid">
+          <section className="card">
+            <div className="section-heading">
+              <h2>Dostępne usługi</h2>
+              <p>Lista usług pobierana z API.</p>
             </div>
-          )}
-        </section>
 
-        <section className="card">
-          <h2>Nowa rezerwacja</h2>
+            <ServiceList services={services} loading={loadingServices} />
+          </section>
 
-          <form onSubmit={handleSubmit} className="booking-form" noValidate>
-            <label>
-              Usługa
-              <select
-                value={serviceId}
-                onChange={(event) => {
-                  setServiceId(event.target.value);
-                  setFormErrors((prev) => ({ ...prev, serviceId: undefined }));
-                }}
-                className={formErrors.serviceId ? 'input-error' : ''}
-              >
-                <option value="">Wybierz usługę</option>
-                {services.map((service) => (
-                  <option key={service.id} value={service.id}>
-                    {service.name}
-                  </option>
-                ))}
-              </select>
-              {formErrors.serviceId && <span className="field-error">{formErrors.serviceId}</span>}
-            </label>
-
-            <label>
-              Imię i nazwisko
-              <input
-                type="text"
-                value={customerName}
-                onChange={(event) => {
-                  setCustomerName(event.target.value);
-                  setFormErrors((prev) => ({ ...prev, customerName: undefined }));
-                }}
-                placeholder="Np. Jan Kowalski"
-                className={formErrors.customerName ? 'input-error' : ''}
-              />
-              {formErrors.customerName && <span className="field-error">{formErrors.customerName}</span>}
-            </label>
-
-            <label>
-              Email
-              <input
-                type="text"
-                value={customerEmail}
-                onChange={(event) => {
-                  setCustomerEmail(event.target.value);
-                  setFormErrors((prev) => ({ ...prev, customerEmail: undefined }));
-                }}
-                placeholder="Np. jan.kowalski@example.com"
-                className={formErrors.customerEmail ? 'input-error' : ''}
-              />
-              {formErrors.customerEmail && <span className="field-error">{formErrors.customerEmail}</span>}
-            </label>
-
-            <label>
-              Termin rezerwacji
-              <input
-                type="datetime-local"
-                value={bookingDate}
-                onChange={(event) => {
-                  setBookingDate(event.target.value);
-                  setFormErrors((prev) => ({ ...prev, bookingDate: undefined }));
-                }}
-                className={formErrors.bookingDate ? 'input-error' : ''}
-              />
-              {formErrors.bookingDate && <span className="field-error">{formErrors.bookingDate}</span>}
-            </label>
-
-            <button type="submit" disabled={submitting}>
-              {submitting ? 'Zapisywanie...' : 'Utwórz rezerwację'}
-            </button>
-          </form>
-        </section>
-
-        <section className="card">
-          <h2>Lista rezerwacji</h2>
-
-          {loadingBookings ? (
-            <p>Ładowanie rezerwacji...</p>
-          ) : bookings.length === 0 ? (
-            <p>Brak rezerwacji.</p>
-          ) : (
-            <div className="bookings-list">
-              {bookings.map((booking) => (
-                <div key={booking.id} className="booking-item">
-                  <h3>Rezerwacja #{booking.id}</h3>
-                  <p>Service ID: {booking.serviceId}</p>
-                  <p>Klient: {booking.customerName}</p>
-                  <p>Email: {booking.customerEmail}</p>
-                  <p>Termin: {booking.bookingDate}</p>
-                  <p>Utworzono: {booking.createdAt}</p>
-                </div>
-              ))}
+          <section className="card">
+            <div className="section-heading">
+              <h2>Nowa rezerwacja</h2>
+              <p>Wypełnij formularz, aby dodać nową rezerwację.</p>
             </div>
-          )}
+
+            <BookingForm
+              services={services}
+              serviceId={serviceId}
+              customerName={customerName}
+              customerEmail={customerEmail}
+              bookingDate={bookingDate}
+              formErrors={formErrors}
+              submitting={submitting}
+              onServiceIdChange={(value) => {
+                setServiceId(value);
+                clearFieldError('serviceId');
+              }}
+              onCustomerNameChange={(value) => {
+                setCustomerName(value);
+                clearFieldError('customerName');
+              }}
+              onCustomerEmailChange={(value) => {
+                setCustomerEmail(value);
+                clearFieldError('customerEmail');
+              }}
+              onBookingDateChange={(value) => {
+                setBookingDate(value);
+                clearFieldError('bookingDate');
+              }}
+              onSubmit={handleSubmit}
+            />
+          </section>
+        </div>
+
+        <section className="card card--full">
+          <div className="section-heading">
+            <h2>Lista rezerwacji</h2>
+            <p>Rezerwacje zapisane w bazie danych.</p>
+          </div>
+
+          <BookingList bookings={bookings} services={services} loading={loadingBookings} />
         </section>
       </div>
     </div>
