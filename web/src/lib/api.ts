@@ -1,4 +1,4 @@
-import type { Booking } from '../types/booking';
+import type { AvailabilityDay, Booking } from '../types/booking';
 import type { Service } from '../types/service';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api';
@@ -20,7 +20,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   const isJson = response.headers.get('content-type')?.includes('application/json');
-
   const data = isJson ? await response.json() : null;
 
   if (!response.ok) {
@@ -51,5 +50,16 @@ export function createBooking(payload: CreateBookingPayload): Promise<Booking> {
   return request<Booking>('/bookings', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export function getAvailability(serviceId: number, date: string): Promise<AvailabilityDay> {
+  const params = new URLSearchParams({
+    serviceId: String(serviceId),
+    date,
+  });
+
+  return request<AvailabilityDay>(`/availability?${params.toString()}`, {
+    method: 'GET',
   });
 }

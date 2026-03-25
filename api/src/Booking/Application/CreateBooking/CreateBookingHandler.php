@@ -16,11 +16,13 @@ final readonly class CreateBookingHandler
 
     public function handle(CreateBookingCommand $command): BookingView
     {
+        $warsawTimezone = new \DateTimeZone('Europe/Warsaw');
+
         $booking = new Booking(
             $command->serviceId,
             $command->customerName,
             $command->customerEmail,
-            new \DateTimeImmutable($command->bookingDate)
+            new \DateTimeImmutable($command->bookingDate, $warsawTimezone)
         );
 
         $this->bookingRepository->save($booking);
@@ -30,8 +32,12 @@ final readonly class CreateBookingHandler
             serviceId: $booking->getServiceId(),
             customerName: $booking->getCustomerName(),
             customerEmail: $booking->getCustomerEmail(),
-            bookingDate: $booking->getBookingDate()->format(\DateTimeInterface::ATOM),
-            createdAt: $booking->getCreatedAt()->format(\DateTimeInterface::ATOM)
+            bookingDate: $booking->getBookingDate()
+                ->setTimezone($warsawTimezone)
+                ->format(\DateTimeInterface::ATOM),
+            createdAt: $booking->getCreatedAt()
+                ->setTimezone($warsawTimezone)
+                ->format(\DateTimeInterface::ATOM)
         );
     }
 }

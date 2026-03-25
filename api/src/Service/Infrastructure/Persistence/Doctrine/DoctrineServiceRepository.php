@@ -27,4 +27,14 @@ final class DoctrineServiceRepository implements ServiceRepositoryInterface
             ->getRepository(Service::class)
             ->findBy(['isActive' => true], ['createdAt' => 'DESC']);
     }
+
+    public function findActiveById(int $id): ?Service
+    {
+        return $this->entityManager
+            ->getRepository(Service::class)
+            ->findOneBy([
+                'id' => $id,
+                'isActive' => true,
+            ]);
+    }
 }

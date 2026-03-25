@@ -12,4 +12,6 @@ interface ServiceRepositoryInterface
      * @return list<Service>
      */
     public function findAllActive(): array;
+
+    public function findActiveById(int $id): ?Service;
 }

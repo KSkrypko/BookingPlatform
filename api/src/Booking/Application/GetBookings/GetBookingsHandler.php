@@ -20,6 +20,7 @@ final readonly class GetBookingsHandler
     public function handle(): array
     {
         $bookings = $this->bookingRepository->findAllOrderedByCreatedAtDesc();
+        $warsawTimezone = new \DateTimeZone('Europe/Warsaw');
 
         return array_map(
             static fn (Booking $booking): BookingListItemView => new BookingListItemView(
@@ -27,8 +28,12 @@ final readonly class GetBookingsHandler
                 serviceId: $booking->getServiceId(),
                 customerName: $booking->getCustomerName(),
                 customerEmail: $booking->getCustomerEmail(),
-                bookingDate: $booking->getBookingDate()->format(\DateTimeInterface::ATOM),
-                createdAt: $booking->getCreatedAt()->format(\DateTimeInterface::ATOM)
+                bookingDate: $booking->getBookingDate()
+                    ->setTimezone($warsawTimezone)
+                    ->format(\DateTimeInterface::ATOM),
+                createdAt: $booking->getCreatedAt()
+                    ->setTimezone($warsawTimezone)
+                    ->format(\DateTimeInterface::ATOM)
             ),
             $bookings
         );

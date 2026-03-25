@@ -4,11 +4,13 @@ Full-stack appointment booking system built with **Symfony API**, **React (Vite)
 
 ## ✨ Features
 
-* View available services
-* Create a booking (name, email, date)
-* Form validation (required fields + email format)
-* Real-time API communication
-* Error handling and user feedback
+- Browse available services
+- Create bookings with selected date and time
+- Real-time validation (required fields, email format)
+- View existing bookings
+- Check available time slots for a selected service and date (availability system)
+- Fullstack communication between React frontend and Symfony API
+- Error handling and user feedback
 
 ## 🧱 Tech Stack
 
@@ -43,9 +45,9 @@ cd BookingPlatform
 
 ```bash
 cd api
-docker compose up -d
-php bin/console doctrine:schema:update --force
-php -S 127.0.0.1:8000 -t public
+docker compose up --build -d
+docker compose exec php composer install
+docker compose exec php php bin/console doctrine:migrations:migrate
 ```
 
 ### Frontend
@@ -56,16 +58,17 @@ npm install
 npm run dev
 ```
 
-App runs on:
-
-http://localhost:5173
-
-
 ## 🔌 API Endpoints
 
+### Services
 * GET /api/services
+
+### Bookings
 * GET /api/bookings
 * POST /api/bookings
+
+### Availability
+* GET /api/availability?serviceId={id}&date=YYYY-MM-DD
 
 
 ## ⚙️ Architecture

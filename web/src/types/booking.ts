@@ -7,6 +7,11 @@ export type Booking = {
   createdAt: string;
 };
 
+export type AvailabilityDay = {
+  date: string;
+  slots: string[];
+};
+
 export type FormErrors = {
   serviceId?: string;
   customerName?: string;

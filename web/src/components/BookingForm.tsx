@@ -1,3 +1,4 @@
+import AvailabilityPicker from './AvailabilityPicker';
 import type { FormErrors } from '../types/booking';
 import type { Service } from '../types/service';
 
@@ -6,13 +7,21 @@ type BookingFormProps = {
   serviceId: string;
   customerName: string;
   customerEmail: string;
-  bookingDate: string;
+  selectedDate: string;
+  selectedTime: string;
+  displayedMonth: Date;
+  availableDates: string[];
+  availableSlots: string[];
+  loadingAvailableDates: boolean;
+  loadingAvailableSlots: boolean;
   formErrors: FormErrors;
   submitting: boolean;
   onServiceIdChange: (value: string) => void;
   onCustomerNameChange: (value: string) => void;
   onCustomerEmailChange: (value: string) => void;
-  onBookingDateChange: (value: string) => void;
+  onDisplayedMonthChange: (value: Date) => void;
+  onSelectedDateChange: (value: string) => void;
+  onSelectedTimeChange: (value: string) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 };
 
@@ -21,13 +30,21 @@ function BookingForm({
   serviceId,
   customerName,
   customerEmail,
-  bookingDate,
+  selectedDate,
+  selectedTime,
+  displayedMonth,
+  availableDates,
+  availableSlots,
+  loadingAvailableDates,
+  loadingAvailableSlots,
   formErrors,
   submitting,
   onServiceIdChange,
   onCustomerNameChange,
   onCustomerEmailChange,
-  onBookingDateChange,
+  onDisplayedMonthChange,
+  onSelectedDateChange,
+  onSelectedTimeChange,
   onSubmit,
 }: BookingFormProps) {
   return (
@@ -73,18 +90,25 @@ function BookingForm({
         {formErrors.customerEmail && <span className="field-error">{formErrors.customerEmail}</span>}
       </label>
 
-      <label>
-        Termin rezerwacji
-        <input
-          type="datetime-local"
-          value={bookingDate}
-          onChange={(event) => onBookingDateChange(event.target.value)}
-          className={formErrors.bookingDate ? 'input-error' : ''}
-        />
-        {formErrors.bookingDate && <span className="field-error">{formErrors.bookingDate}</span>}
-      </label>
+      <div className="booking-form__availability">
+        <span className="booking-form__section-label">Termin rezerwacji</span>
 
-      <button type="submit" disabled={submitting}>
+        <AvailabilityPicker
+          month={displayedMonth}
+          selectedDate={selectedDate}
+          selectedTime={selectedTime}
+          availableDates={availableDates}
+          availableSlots={availableSlots}
+          loadingAvailableDates={loadingAvailableDates}
+          loadingAvailableSlots={loadingAvailableSlots}
+          error={formErrors.bookingDate}
+          onMonthChange={onDisplayedMonthChange}
+          onDateSelect={onSelectedDateChange}
+          onTimeSelect={onSelectedTimeChange}
+        />
+      </div>
+
+      <button type="submit" disabled={submitting} className="booking-form__submit">
         {submitting ? 'Zapisywanie...' : 'Utwórz rezerwację'}
       </button>
     </form>

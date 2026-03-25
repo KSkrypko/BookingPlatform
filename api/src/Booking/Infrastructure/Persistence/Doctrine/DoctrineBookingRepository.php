@@ -27,4 +27,20 @@ final class DoctrineBookingRepository implements BookingRepositoryInterface
             ->getRepository(Booking::class)
             ->findBy([], ['createdAt' => 'DESC']);
     }
+
+    public function findBetweenBookingDates(
+        \DateTimeImmutable $start,
+        \DateTimeImmutable $end
+    ): array {
+        return $this->entityManager
+            ->getRepository(Booking::class)
+            ->createQueryBuilder('booking')
+            ->andWhere('booking.bookingDate >= :start')
+            ->andWhere('booking.bookingDate < :end')
+            ->setParameter('start', $start)
+            ->setParameter('end', $end)
+            ->orderBy('booking.bookingDate', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
 }

@@ -12,4 +12,12 @@ interface BookingRepositoryInterface
      * @return list<Booking>
      */
     public function findAllOrderedByCreatedAtDesc(): array;
+
+    /**
+     * @return list<Booking>
+     */
+    public function findBetweenBookingDates(
+        \DateTimeImmutable $start,
+        \DateTimeImmutable $end
+    ): array;
 }

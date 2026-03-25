@@ -1,12 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import BookingForm from './components/BookingForm';
 import BookingList from './components/BookingList';
 import Message from './components/Message';
 import ServiceList from './components/ServiceList';
-import { createBooking, getBookings, getServices } from './lib/api';
+import { createBooking, getAvailability, getBookings, getServices } from './lib/api';
 import type { Booking, FormErrors } from './types/booking';
 import type { Service } from './types/service';
+
+function toIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthDates(month: Date): string[] {
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+
+  return Array.from({ length: lastDay }, (_, index) => {
+    return toIsoDate(new Date(year, monthIndex, index + 1));
+  });
+}
+
+function isSameMonth(dateString: string, month: Date): boolean {
+  const monthPrefix = `${month.getFullYear()}-${`${month.getMonth() + 1}`.padStart(2, '0')}`;
+  return dateString.startsWith(monthPrefix);
+}
 
 function App() {
   const [services, setServices] = useState<Service[]>([]);
@@ -14,13 +37,30 @@ function App() {
   const [serviceId, setServiceId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
-  const [bookingDate, setBookingDate] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedTime, setSelectedTime] = useState('');
+  const [displayedMonth, setDisplayedMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [loadingAvailableDates, setLoadingAvailableDates] = useState(false);
+  const [loadingAvailableSlots, setLoadingAvailableSlots] = useState(false);
   const [loadingServices, setLoadingServices] = useState(true);
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  const bookingDate = useMemo(() => {
+    if (!selectedDate || !selectedTime) {
+      return '';
+    }
+
+    return `${selectedDate}T${selectedTime}:00`;
+  }, [selectedDate, selectedTime]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -47,6 +87,110 @@ function App() {
 
     void loadData();
   }, []);
+
+  useEffect(() => {
+    if (!serviceId) {
+      setAvailableDates([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadMonthAvailability = async () => {
+      try {
+        setLoadingAvailableDates(true);
+
+        const monthDates = getMonthDates(displayedMonth);
+
+        const results = await Promise.all(
+          monthDates.map(async (date) => {
+            try {
+              return await getAvailability(Number(serviceId), date);
+            } catch {
+              return { date, slots: [] };
+            }
+          }),
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const nextAvailableDates = results
+          .filter((item) => item.slots.length > 0)
+          .map((item) => item.date);
+
+        setAvailableDates(nextAvailableDates);
+
+        if (selectedDate && isSameMonth(selectedDate, displayedMonth) && !nextAvailableDates.includes(selectedDate)) {
+          setSelectedDate('');
+          setSelectedTime('');
+          setAvailableSlots([]);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(
+            error instanceof Error ? error.message : 'Nie udało się pobrać dostępnych dni.',
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingAvailableDates(false);
+        }
+      }
+    };
+
+    void loadMonthAvailability();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [serviceId, displayedMonth, selectedDate]);
+
+  useEffect(() => {
+    if (!serviceId || !selectedDate) {
+      setAvailableSlots([]);
+      setSelectedTime('');
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSlots = async () => {
+      try {
+        setLoadingAvailableSlots(true);
+
+        const availability = await getAvailability(Number(serviceId), selectedDate);
+
+        if (cancelled) {
+          return;
+        }
+
+        setAvailableSlots(availability.slots);
+
+        if (selectedTime && !availability.slots.includes(selectedTime)) {
+          setSelectedTime('');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(
+            error instanceof Error ? error.message : 'Nie udało się pobrać dostępnych godzin.',
+          );
+          setAvailableSlots([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingAvailableSlots(false);
+        }
+      }
+    };
+
+    void loadSlots();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [serviceId, selectedDate, selectedTime]);
 
   const loadBookings = async () => {
     try {
@@ -82,8 +226,8 @@ function App() {
       errors.customerEmail = 'Podaj poprawny adres email.';
     }
 
-    if (!bookingDate) {
-      errors.bookingDate = 'Wybierz termin rezerwacji.';
+    if (!selectedDate || !selectedTime || !bookingDate) {
+      errors.bookingDate = 'Wybierz dzień i godzinę rezerwacji.';
     }
 
     return errors;
@@ -99,7 +243,9 @@ function App() {
   const resetForm = () => {
     setCustomerName('');
     setCustomerEmail('');
-    setBookingDate('');
+    setSelectedDate('');
+    setSelectedTime('');
+    setAvailableSlots([]);
     setFormErrors({});
   };
 
@@ -161,7 +307,7 @@ function App() {
           <section className="card">
             <div className="section-heading">
               <h2>Nowa rezerwacja</h2>
-              <p>Wypełnij formularz, aby dodać nową rezerwację.</p>
+              <p>Wybierz dzień i godzinę podobnie jak w aplikacjach rezerwacyjnych.</p>
             </div>
 
             <BookingForm
@@ -169,12 +315,22 @@ function App() {
               serviceId={serviceId}
               customerName={customerName}
               customerEmail={customerEmail}
-              bookingDate={bookingDate}
+              selectedDate={selectedDate}
+              selectedTime={selectedTime}
+              displayedMonth={displayedMonth}
+              availableDates={availableDates}
+              availableSlots={availableSlots}
+              loadingAvailableDates={loadingAvailableDates}
+              loadingAvailableSlots={loadingAvailableSlots}
               formErrors={formErrors}
               submitting={submitting}
               onServiceIdChange={(value) => {
                 setServiceId(value);
+                setSelectedDate('');
+                setSelectedTime('');
+                setAvailableSlots([]);
                 clearFieldError('serviceId');
+                clearFieldError('bookingDate');
               }}
               onCustomerNameChange={(value) => {
                 setCustomerName(value);
@@ -184,8 +340,16 @@ function App() {
                 setCustomerEmail(value);
                 clearFieldError('customerEmail');
               }}
-              onBookingDateChange={(value) => {
-                setBookingDate(value);
+              onDisplayedMonthChange={(value) => {
+                setDisplayedMonth(value);
+              }}
+              onSelectedDateChange={(value) => {
+                setSelectedDate(value);
+                setSelectedTime('');
+                clearFieldError('bookingDate');
+              }}
+              onSelectedTimeChange={(value) => {
+                setSelectedTime(value);
                 clearFieldError('bookingDate');
               }}
               onSubmit={handleSubmit}

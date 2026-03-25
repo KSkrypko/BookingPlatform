@@ -8,5 +8,6 @@ export function formatDateTime(dateString: string): string {
   return new Intl.DateTimeFormat('pl-PL', {
     dateStyle: 'medium',
     timeStyle: 'short',
+    timeZone: 'Europe/Warsaw',
   }).format(date);
 }
