@@ -19,6 +19,12 @@ doctrine:
                 dir: '%kernel.project_dir%/src/Booking/Domain'
                 prefix: 'App\Booking\Domain'
                 alias: Booking
+            User:
+                is_bundle: false
+                type: attribute
+                dir: '%kernel.project_dir%/src/User/Domain'
+                prefix: 'App\User\Domain'
+                alias: User
 
 when@test:
     doctrine:

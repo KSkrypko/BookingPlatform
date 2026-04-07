@@ -23,18 +23,26 @@ final readonly class GetBookingsHandler
         $warsawTimezone = new \DateTimeZone('Europe/Warsaw');
 
         return array_map(
-            static fn (Booking $booking): BookingListItemView => new BookingListItemView(
-                id: $booking->getId() ?? 0,
-                serviceId: $booking->getServiceId(),
-                customerName: $booking->getCustomerName(),
-                customerEmail: $booking->getCustomerEmail(),
-                bookingDate: $booking->getBookingDate()
-                    ->setTimezone($warsawTimezone)
-                    ->format(\DateTimeInterface::ATOM),
-                createdAt: $booking->getCreatedAt()
-                    ->setTimezone($warsawTimezone)
-                    ->format(\DateTimeInterface::ATOM)
-            ),
+            static function (Booking $booking) use ($warsawTimezone): BookingListItemView {
+                $bookingDateInWarsaw = new \DateTimeImmutable(
+                    $booking->getBookingDate()->format('Y-m-d H:i:s'),
+                    $warsawTimezone
+                );
+
+                $createdAtInWarsaw = new \DateTimeImmutable(
+                    $booking->getCreatedAt()->format('Y-m-d H:i:s'),
+                    $warsawTimezone
+                );
+
+                return new BookingListItemView(
+                    id: $booking->getId() ?? 0,
+                    serviceId: $booking->getServiceId(),
+                    customerName: $booking->getCustomerName(),
+                    customerEmail: $booking->getCustomerEmail(),
+                    bookingDate: $bookingDateInWarsaw->format(\DateTimeInterface::ATOM),
+                    createdAt: $createdAtInWarsaw->format(\DateTimeInterface::ATOM)
+                );
+            },
             $bookings
         );
     }

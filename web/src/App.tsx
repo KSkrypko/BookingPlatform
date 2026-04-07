@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import './App.css';
-import BookingForm from './components/BookingForm';
-import BookingList from './components/BookingList';
+import AuthScreen from './components/AuthScreen';
+import ClientDashboard from './components/ClientDashboard';
 import Message from './components/Message';
-import ServiceList from './components/ServiceList';
-import { createBooking, getAvailability, getBookings, getServices } from './lib/api';
+import ProviderDashboard from './components/ProviderDashboard';
+import {
+  clearToken,
+  createBooking,
+  createService,
+  getAvailability,
+  getBookings,
+  getMe,
+  getServices,
+  hasToken,
+  login,
+  register,
+} from './lib/api';
+import type { AccountType, AuthUser } from './types/auth';
 import type { Booking, FormErrors } from './types/booking';
 import type { Service } from './types/service';
 
@@ -50,6 +62,9 @@ function App() {
   const [loadingServices, setLoadingServices] = useState(true);
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [providerSubmitting, setProviderSubmitting] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [formErrors, setFormErrors] = useState<FormErrors>({});
@@ -89,6 +104,24 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const loadMe = async () => {
+      if (!hasToken()) {
+        return;
+      }
+
+      try {
+        const user = await getMe();
+        setAuthUser(user);
+      } catch {
+        clearToken();
+        setAuthUser(null);
+      }
+    };
+
+    void loadMe();
+  }, []);
+
+  useEffect(() => {
     if (!serviceId) {
       setAvailableDates([]);
       return;
@@ -122,7 +155,11 @@ function App() {
 
         setAvailableDates(nextAvailableDates);
 
-        if (selectedDate && isSameMonth(selectedDate, displayedMonth) && !nextAvailableDates.includes(selectedDate)) {
+        if (
+          selectedDate &&
+          isSameMonth(selectedDate, displayedMonth) &&
+          !nextAvailableDates.includes(selectedDate)
+        ) {
           setSelectedDate('');
           setSelectedTime('');
           setAvailableSlots([]);
@@ -204,6 +241,22 @@ function App() {
     }
   };
 
+  const loadServices = async () => {
+    try {
+      setLoadingServices(true);
+      const servicesData = await getServices();
+      setServices(servicesData);
+
+      if (servicesData.length > 0) {
+        setServiceId((currentValue) => currentValue || String(servicesData[0].id));
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Nie udało się pobrać usług.');
+    } finally {
+      setLoadingServices(false);
+    }
+  };
+
   const validateForm = (): FormErrors => {
     const errors: FormErrors = {};
     const trimmedCustomerName = customerName.trim();
@@ -249,7 +302,69 @@ function App() {
     setFormErrors({});
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      setAuthLoading(true);
+      setErrorMessage('');
+      setSuccessMessage('');
+
+      await login({ email, password });
+      const user = await getMe();
+      setAuthUser(user);
+
+      setSuccessMessage('Zalogowano pomyślnie.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Nie udało się zalogować.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleRegister = async (email: string, password: string, accountType: AccountType) => {
+    try {
+      setAuthLoading(true);
+      setErrorMessage('');
+      setSuccessMessage('');
+
+      await register({ email, password, accountType });
+
+      setSuccessMessage('Konto zostało utworzone. Teraz zaloguj się.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Nie udało się utworzyć konta.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    clearToken();
+    setAuthUser(null);
+    setSuccessMessage('Wylogowano.');
+  };
+
+  const handleProviderServiceCreate = async (payload: {
+    name: string;
+    description: string | null;
+    price: string;
+    durationMinutes: number;
+  }) => {
+    try {
+      setProviderSubmitting(true);
+      setErrorMessage('');
+      setSuccessMessage('');
+
+      await createService(payload);
+      await loadServices();
+
+      setSuccessMessage('Usługa została dodana.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Nie udało się dodać usługi.');
+    } finally {
+      setProviderSubmitting(false);
+    }
+  };
+
+  const handleBookingSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     setErrorMessage('');
@@ -285,86 +400,91 @@ function App() {
   return (
     <div className="app">
       <div className="container">
-        <header className="hero">
-          <div className="hero__content">
-            <h1>Booking Platform</h1>
-          </div>
-        </header>
-
         {errorMessage && <Message type="error">{errorMessage}</Message>}
         {successMessage && <Message type="success">{successMessage}</Message>}
 
-        <div className="content-grid">
-          <section className="card">
-            <div className="section-heading">
-              <h2>Dostępne usługi</h2>
-              <p>Lista usług pobierana z API.</p>
-            </div>
+        {!authUser ? (
+          <AuthScreen
+            loading={authLoading}
+            onLogin={handleLogin}
+            onRegister={handleRegister}
+          />
+        ) : (
+          <>
+            <header className="hero">
+              <div className="hero__content hero__content--row">
+                <h1>Booking Platform</h1>
 
-            <ServiceList services={services} loading={loadingServices} />
-          </section>
+                <div className="auth-user-box">
+                  <span>{authUser.email}</span>
+                  <span className="auth-user-box__role">
+                    {authUser.accountType === 'provider' ? 'Usługodawca' : 'Klient'}
+                  </span>
+                  <button type="button" onClick={handleLogout}>
+                    Wyloguj
+                  </button>
+                </div>
+              </div>
+            </header>
 
-          <section className="card">
-            <div className="section-heading">
-              <h2>Nowa rezerwacja</h2>
-              <p>Wybierz dzień i godzinę podobnie jak w aplikacjach rezerwacyjnych.</p>
-            </div>
-
-            <BookingForm
-              services={services}
-              serviceId={serviceId}
-              customerName={customerName}
-              customerEmail={customerEmail}
-              selectedDate={selectedDate}
-              selectedTime={selectedTime}
-              displayedMonth={displayedMonth}
-              availableDates={availableDates}
-              availableSlots={availableSlots}
-              loadingAvailableDates={loadingAvailableDates}
-              loadingAvailableSlots={loadingAvailableSlots}
-              formErrors={formErrors}
-              submitting={submitting}
-              onServiceIdChange={(value) => {
-                setServiceId(value);
-                setSelectedDate('');
-                setSelectedTime('');
-                setAvailableSlots([]);
-                clearFieldError('serviceId');
-                clearFieldError('bookingDate');
-              }}
-              onCustomerNameChange={(value) => {
-                setCustomerName(value);
-                clearFieldError('customerName');
-              }}
-              onCustomerEmailChange={(value) => {
-                setCustomerEmail(value);
-                clearFieldError('customerEmail');
-              }}
-              onDisplayedMonthChange={(value) => {
-                setDisplayedMonth(value);
-              }}
-              onSelectedDateChange={(value) => {
-                setSelectedDate(value);
-                setSelectedTime('');
-                clearFieldError('bookingDate');
-              }}
-              onSelectedTimeChange={(value) => {
-                setSelectedTime(value);
-                clearFieldError('bookingDate');
-              }}
-              onSubmit={handleSubmit}
-            />
-          </section>
-        </div>
-
-        <section className="card card--full">
-          <div className="section-heading">
-            <h2>Lista rezerwacji</h2>
-            <p>Rezerwacje zapisane w bazie danych.</p>
-          </div>
-
-          <BookingList bookings={bookings} services={services} loading={loadingBookings} />
-        </section>
+            {authUser.accountType === 'client' ? (
+              <ClientDashboard
+                services={services}
+                bookings={bookings}
+                loadingServices={loadingServices}
+                loadingBookings={loadingBookings}
+                serviceId={serviceId}
+                customerName={customerName}
+                customerEmail={customerEmail}
+                selectedDate={selectedDate}
+                selectedTime={selectedTime}
+                displayedMonth={displayedMonth}
+                availableDates={availableDates}
+                availableSlots={availableSlots}
+                loadingAvailableDates={loadingAvailableDates}
+                loadingAvailableSlots={loadingAvailableSlots}
+                formErrors={formErrors}
+                submitting={submitting}
+                onServiceIdChange={(value) => {
+                  setServiceId(value);
+                  setSelectedDate('');
+                  setSelectedTime('');
+                  setAvailableSlots([]);
+                  clearFieldError('serviceId');
+                  clearFieldError('bookingDate');
+                }}
+                onCustomerNameChange={(value) => {
+                  setCustomerName(value);
+                  clearFieldError('customerName');
+                }}
+                onCustomerEmailChange={(value) => {
+                  setCustomerEmail(value);
+                  clearFieldError('customerEmail');
+                }}
+                onDisplayedMonthChange={(value) => {
+                  setDisplayedMonth(value);
+                }}
+                onSelectedDateChange={(value) => {
+                  setSelectedDate(value);
+                  setSelectedTime('');
+                  clearFieldError('bookingDate');
+                }}
+                onSelectedTimeChange={(value) => {
+                  setSelectedTime(value);
+                  clearFieldError('bookingDate');
+                }}
+                onSubmit={handleBookingSubmit}
+              />
+            ) : (
+              <ProviderDashboard
+                services={services}
+                loadingServices={loadingServices}
+                providerSubmitting={providerSubmitting}
+                onSubmit={handleProviderServiceCreate}
+              />
+            )}
+          </>
+        )}
       </div>
     </div>
   );

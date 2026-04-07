@@ -18,26 +18,32 @@ final readonly class CreateBookingHandler
     {
         $warsawTimezone = new \DateTimeZone('Europe/Warsaw');
 
+        $bookingDateInWarsaw = new \DateTimeImmutable(
+            $command->bookingDate,
+            $warsawTimezone
+        );
+
         $booking = new Booking(
             $command->serviceId,
             $command->customerName,
             $command->customerEmail,
-            new \DateTimeImmutable($command->bookingDate, $warsawTimezone)
+            $bookingDateInWarsaw
         );
 
         $this->bookingRepository->save($booking);
+
+        $createdAtInWarsaw = new \DateTimeImmutable(
+            $booking->getCreatedAt()->format('Y-m-d H:i:s'),
+            $warsawTimezone
+        );
 
         return new BookingView(
             id: $booking->getId() ?? 0,
             serviceId: $booking->getServiceId(),
             customerName: $booking->getCustomerName(),
             customerEmail: $booking->getCustomerEmail(),
-            bookingDate: $booking->getBookingDate()
-                ->setTimezone($warsawTimezone)
-                ->format(\DateTimeInterface::ATOM),
-            createdAt: $booking->getCreatedAt()
-                ->setTimezone($warsawTimezone)
-                ->format(\DateTimeInterface::ATOM)
+            bookingDate: $bookingDateInWarsaw->format(\DateTimeInterface::ATOM),
+            createdAt: $createdAtInWarsaw->format(\DateTimeInterface::ATOM)
         );
     }
 }

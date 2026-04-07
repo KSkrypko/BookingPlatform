@@ -40,7 +40,7 @@ class Booking
         $this->setCustomerName($customerName);
         $this->setCustomerEmail($customerEmail);
         $this->bookingDate = $bookingDate;
-        $this->createdAt = new \DateTimeImmutable();
+        $this->createdAt = new \DateTimeImmutable('now', new \DateTimeZone('Europe/Warsaw'));
     }
 
     public function getId(): ?int
