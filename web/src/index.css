@@ -26,3 +26,10 @@ body,
 body {
   margin: 0;
 }
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+}
