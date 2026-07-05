@@ -1,4 +1,6 @@
 {
+    "name": "kskrypko/booking-platform-api",
+    "description": "Symfony REST API for the BookingPlatform appointment booking system.",
     "type": "project",
     "license": "proprietary",
     "minimum-stability": "stable",
