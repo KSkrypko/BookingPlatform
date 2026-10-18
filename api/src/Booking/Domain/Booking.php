@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace App\Booking\Domain;
 
+use App\Service\Domain\Service;
+use App\User\Domain\User;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'bookings')]
+#[ORM\Index(name: 'idx_bookings_service', columns: ['service_id'])]
+#[ORM\Index(name: 'idx_bookings_client', columns: ['client_id'])]
 class Booking
 {
     #[ORM\Id]
@@ -15,8 +19,13 @@ class Booking
     #[ORM\Column]
     private ?int $id = null;
 
-    #[ORM\Column]
-    private int $serviceId;
+    #[ORM\ManyToOne(targetEntity: Service::class)]
+    #[ORM\JoinColumn(name: 'service_id', nullable: false)]
+    private Service $service;
+
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'client_id', nullable: true)]
+    private ?User $client = null;
 
     #[ORM\Column(length: 255)]
     private string $customerName;
@@ -31,12 +40,14 @@ class Booking
     private \DateTimeImmutable $createdAt;
 
     public function __construct(
-        int $serviceId,
+        Service $service,
+        User $client,
         string $customerName,
         string $customerEmail,
         \DateTimeImmutable $bookingDate
     ) {
-        $this->setServiceId($serviceId);
+        $this->service = $service;
+        $this->client = $client;
         $this->setCustomerName($customerName);
         $this->setCustomerEmail($customerEmail);
         $this->bookingDate = $bookingDate;
@@ -50,7 +61,17 @@ class Booking
 
     public function getServiceId(): int
     {
-        return $this->serviceId;
+        return $this->service->getId() ?? 0;
+    }
+
+    public function getService(): Service
+    {
+        return $this->service;
+    }
+
+    public function getClient(): ?User
+    {
+        return $this->client;
     }
 
     public function getCustomerName(): string
@@ -71,15 +92,6 @@ class Booking
     public function getCreatedAt(): \DateTimeImmutable
     {
         return $this->createdAt;
-    }
-
-    private function setServiceId(int $serviceId): void
-    {
-        if ($serviceId <= 0) {
-            throw new \InvalidArgumentException('Service id must be greater than zero.');
-        }
-
-        $this->serviceId = $serviceId;
     }
 
     private function setCustomerName(string $customerName): void

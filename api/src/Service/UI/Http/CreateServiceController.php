@@ -6,18 +6,20 @@ namespace App\Service\UI\Http;
 
 use App\Service\Domain\Service;
 use App\Service\Domain\ServiceRepositoryInterface;
+use App\User\Domain\User;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\CurrentUser;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 final class CreateServiceController extends AbstractController
 {
     #[Route('/api/services', name: 'api_services_create', methods: ['POST'])]
     #[IsGranted('ROLE_PROVIDER')]
-    public function __invoke(Request $request, ServiceRepositoryInterface $serviceRepository): JsonResponse
+    public function __invoke(Request $request, ServiceRepositoryInterface $serviceRepository, #[CurrentUser] User $user): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
 
@@ -44,7 +46,8 @@ final class CreateServiceController extends AbstractController
                 $name,
                 $description,
                 $price,
-                $durationMinutes
+                $durationMinutes,
+                $user
             );
 
             $serviceRepository->save($service);

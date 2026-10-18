@@ -46,6 +46,7 @@ function isSameMonth(dateString: string, month: Date): boolean {
 function App() {
   const [services, setServices] = useState<Service[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookingsVersion, setBookingsVersion] = useState(0);
   const [serviceId, setServiceId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -60,7 +61,7 @@ function App() {
   const [loadingAvailableDates, setLoadingAvailableDates] = useState(false);
   const [loadingAvailableSlots, setLoadingAvailableSlots] = useState(false);
   const [loadingServices, setLoadingServices] = useState(true);
-  const [loadingBookings, setLoadingBookings] = useState(true);
+  const [loadingBookings, setLoadingBookings] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [providerSubmitting, setProviderSubmitting] = useState(false);
@@ -82,12 +83,9 @@ function App() {
       try {
         setErrorMessage('');
         setLoadingServices(true);
-        setLoadingBookings(true);
-
-        const [servicesData, bookingsData] = await Promise.all([getServices(), getBookings()]);
+        const servicesData = await getServices();
 
         setServices(servicesData);
-        setBookings(bookingsData);
 
         if (servicesData.length > 0) {
           setServiceId((currentValue) => currentValue || String(servicesData[0].id));
@@ -96,12 +94,47 @@ function App() {
         setErrorMessage(error instanceof Error ? error.message : 'Wystąpił nieznany błąd.');
       } finally {
         setLoadingServices(false);
-        setLoadingBookings(false);
       }
     };
 
     void loadData();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadBookings = async () => {
+      if (!authUser || authUser.accountType !== 'client') {
+        setBookings([]);
+        setLoadingBookings(false);
+        return;
+      }
+
+      try {
+        setLoadingBookings(true);
+        const bookingsData = await getBookings();
+
+        if (!cancelled) {
+          setBookings(bookingsData);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setBookings([]);
+          setErrorMessage(error instanceof Error ? error.message : 'Nie udało się pobrać rezerwacji.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingBookings(false);
+        }
+      }
+    };
+
+    void loadBookings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser, bookingsVersion]);
 
   useEffect(() => {
     const loadMe = async () => {
@@ -229,18 +262,6 @@ function App() {
     };
   }, [serviceId, selectedDate, selectedTime]);
 
-  const loadBookings = async () => {
-    try {
-      setLoadingBookings(true);
-      const bookingsData = await getBookings();
-      setBookings(bookingsData);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Nie udało się pobrać rezerwacji.');
-    } finally {
-      setLoadingBookings(false);
-    }
-  };
-
   const loadServices = async () => {
     try {
       setLoadingServices(true);
@@ -339,6 +360,8 @@ function App() {
   const handleLogout = () => {
     clearToken();
     setAuthUser(null);
+    setBookings([]);
+    resetForm();
     setSuccessMessage('Wylogowano.');
   };
 
@@ -389,7 +412,7 @@ function App() {
 
       setSuccessMessage('Rezerwacja została utworzona.');
       resetForm();
-      await loadBookings();
+      setBookingsVersion((currentVersion) => currentVersion + 1);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Wystąpił nieznany błąd.');
     } finally {

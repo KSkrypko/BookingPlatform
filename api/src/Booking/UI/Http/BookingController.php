@@ -7,11 +7,13 @@ namespace App\Booking\UI\Http;
 use App\Booking\Application\CreateBooking\CreateBookingCommand;
 use App\Booking\Application\CreateBooking\CreateBookingHandler;
 use App\Booking\Application\GetBookings\GetBookingsHandler;
+use App\User\Domain\User;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\CurrentUser;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 #[Route('/api/bookings')]
@@ -19,7 +21,7 @@ final class BookingController extends AbstractController
 {
     #[Route('', name: 'api_bookings_create', methods: ['POST'])]
     #[IsGranted('ROLE_CLIENT')]
-    public function create(Request $request, CreateBookingHandler $handler): JsonResponse
+    public function create(Request $request, CreateBookingHandler $handler, #[CurrentUser] User $user): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
 
@@ -48,7 +50,8 @@ final class BookingController extends AbstractController
                     $customerName,
                     $customerEmail,
                     $bookingDate
-                )
+                ),
+                $user
             );
         } catch (\Throwable $exception) {
             return $this->json(['message' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
@@ -58,8 +61,9 @@ final class BookingController extends AbstractController
     }
 
     #[Route('', name: 'api_bookings_list', methods: ['GET'])]
-    public function list(GetBookingsHandler $handler): JsonResponse
+    #[IsGranted('IS_AUTHENTICATED_FULLY')]
+    public function list(GetBookingsHandler $handler, #[CurrentUser] User $user): JsonResponse
     {
-        return $this->json($handler->handle());
+        return $this->json($handler->handle($user));
     }
 }
