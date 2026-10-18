@@ -6,6 +6,7 @@ namespace App\Booking\Infrastructure\Persistence\Doctrine;
 
 use App\Booking\Domain\Booking;
 use App\Booking\Domain\BookingRepositoryInterface;
+use App\User\Domain\User;
 use Doctrine\ORM\EntityManagerInterface;
 
 final class DoctrineBookingRepository implements BookingRepositoryInterface
@@ -21,11 +22,32 @@ final class DoctrineBookingRepository implements BookingRepositoryInterface
         $this->entityManager->flush();
     }
 
-    public function findAllOrderedByCreatedAtDesc(): array
+    public function findVisibleToUser(User $user): array
     {
-        return $this->entityManager
+        if ($user->getId() === null) {
+            return [];
+        }
+
+        $queryBuilder = $this->entityManager
             ->getRepository(Booking::class)
-            ->findBy([], ['createdAt' => 'DESC']);
+            ->createQueryBuilder('booking')
+            ->orderBy('booking.createdAt', 'DESC');
+
+        if (in_array(User::ROLE_PROVIDER, $user->getRoles(), true)) {
+            $queryBuilder
+                ->innerJoin('booking.service', 'service')
+                ->andWhere('service.provider = :user')
+                ->andWhere('booking.client IS NOT NULL');
+        } elseif (in_array(User::ROLE_CLIENT, $user->getRoles(), true)) {
+            $queryBuilder->andWhere('booking.client = :user');
+        } else {
+            return [];
+        }
+
+        return $queryBuilder
+            ->setParameter('user', $user)
+            ->getQuery()
+            ->getResult();
     }
 
     public function findBetweenBookingDates(

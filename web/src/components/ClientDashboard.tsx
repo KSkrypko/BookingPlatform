@@ -100,8 +100,8 @@ function ClientDashboard({
 
       <section className="card card--full">
         <div className="section-heading">
-          <h2>Lista rezerwacji</h2>
-          <p>Rezerwacje zapisane w bazie danych.</p>
+          <h2>Moje rezerwacje</h2>
+          <p>Twoje rezerwacje zapisane w systemie.</p>
         </div>
 
         <BookingList bookings={bookings} services={services} loading={loadingBookings} />

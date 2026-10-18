@@ -4,16 +4,22 @@ declare(strict_types=1);
 
 namespace App\Service\Domain;
 
+use App\User\Domain\User;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'services')]
+#[ORM\Index(name: 'idx_services_provider', columns: ['provider_id'])]
 class Service
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column(type: 'integer')]
     private ?int $id = null;
+
+    #[ORM\ManyToOne(targetEntity: User::class)]
+    #[ORM\JoinColumn(name: 'provider_id', nullable: true)]
+    private ?User $provider = null;
 
     #[ORM\Column(length: 255)]
     private string $name;
@@ -37,7 +43,8 @@ class Service
         string $name,
         ?string $description,
         string $price,
-        int $durationMinutes
+        int $durationMinutes,
+        ?User $provider = null
     ) {
         $this->setName($name);
         $this->setDescription($description);
@@ -45,6 +52,7 @@ class Service
         $this->setDurationMinutes($durationMinutes);
         $this->createdAt = new \DateTimeImmutable();
         $this->isActive = true;
+        $this->provider = $provider;
     }
 
     public function getId(): ?int
@@ -55,6 +63,11 @@ class Service
     public function getName(): string
     {
         return $this->name;
+    }
+
+    public function getProvider(): ?User
+    {
+        return $this->provider;
     }
 
     public function changeName(string $name): void

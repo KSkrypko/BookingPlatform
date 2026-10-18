@@ -6,6 +6,7 @@ namespace App\Booking\Application\GetBookings;
 
 use App\Booking\Domain\Booking;
 use App\Booking\Domain\BookingRepositoryInterface;
+use App\User\Domain\User;
 
 final readonly class GetBookingsHandler
 {
@@ -17,9 +18,9 @@ final readonly class GetBookingsHandler
     /**
      * @return list<BookingListItemView>
      */
-    public function handle(): array
+    public function handle(User $user): array
     {
-        $bookings = $this->bookingRepository->findAllOrderedByCreatedAtDesc();
+        $bookings = $this->bookingRepository->findVisibleToUser($user);
         $warsawTimezone = new \DateTimeZone('Europe/Warsaw');
 
         return array_map(

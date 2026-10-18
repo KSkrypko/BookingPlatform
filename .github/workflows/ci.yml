@@ -10,6 +10,20 @@ jobs:
   backend:
     name: Backend (PHP)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: booking_platform_migration_test
+          POSTGRES_USER: booking_test
+          POSTGRES_PASSWORD: booking_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U booking_test -d booking_platform_migration_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: api
@@ -20,7 +34,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.4"
-          extensions: ctype, iconv, intl, pdo_pgsql
+          extensions: ctype, iconv, intl, pdo_pgsql, pdo_sqlite
           coverage: none
 
       - name: Validate composer.json
@@ -41,7 +55,12 @@ jobs:
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
       - name: Run PHPUnit
-        run: vendor/bin/phpunit
+        run: vendor/bin/phpunit --exclude-group migration
+
+      - name: Test PostgreSQL ownership migration
+        env:
+          MIGRATION_DATABASE_URL: postgresql://booking_test:booking_test@127.0.0.1:5432/booking_platform_migration_test
+        run: vendor/bin/phpunit --group migration --fail-on-skipped
 
   frontend:
     name: Frontend (React)

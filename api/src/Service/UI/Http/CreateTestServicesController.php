@@ -6,18 +6,22 @@ namespace App\Service\UI\Http;
 
 use App\Service\Domain\Service;
 use App\Service\Domain\ServiceRepositoryInterface;
+use App\User\Domain\User;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Http\Attribute\CurrentUser;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 final class CreateTestServicesController extends AbstractController
 {
     #[Route('/api/dev/services/seed', name: 'api_dev_services_seed', methods: ['POST'])]
-    public function __invoke(ServiceRepositoryInterface $serviceRepository): JsonResponse
+    #[IsGranted('ROLE_PROVIDER')]
+    public function __invoke(ServiceRepositoryInterface $serviceRepository, #[CurrentUser] User $user): JsonResponse
     {
-        $serviceRepository->save(new Service('Eyebrow Lamination', 'Eyebrow styling and lamination treatment.', '120.00', 45));
-        $serviceRepository->save(new Service('Lash Lift', 'Natural lash lifting treatment.', '150.00', 60));
-        $serviceRepository->save(new Service('Hydrafacial', 'Deep facial cleansing and hydration.', '200.00', 60));
+        $serviceRepository->save(new Service('Eyebrow Lamination', 'Eyebrow styling and lamination treatment.', '120.00', 45, $user));
+        $serviceRepository->save(new Service('Lash Lift', 'Natural lash lifting treatment.', '150.00', 60, $user));
+        $serviceRepository->save(new Service('Hydrafacial', 'Deep facial cleansing and hydration.', '200.00', 60, $user));
 
         return $this->json(['status' => 'ok']);
     }

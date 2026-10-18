@@ -6,16 +6,25 @@ namespace App\Booking\Application\CreateBooking;
 
 use App\Booking\Domain\Booking;
 use App\Booking\Domain\BookingRepositoryInterface;
+use App\Service\Domain\ServiceRepositoryInterface;
+use App\User\Domain\User;
 
 final readonly class CreateBookingHandler
 {
     public function __construct(
-        private BookingRepositoryInterface $bookingRepository
+        private BookingRepositoryInterface $bookingRepository,
+        private ServiceRepositoryInterface $serviceRepository
     ) {
     }
 
-    public function handle(CreateBookingCommand $command): BookingView
+    public function handle(CreateBookingCommand $command, User $client): BookingView
     {
+        $service = $this->serviceRepository->findActiveById($command->serviceId);
+
+        if ($service === null) {
+            throw new \InvalidArgumentException('Wybrana usługa nie istnieje.');
+        }
+
         $warsawTimezone = new \DateTimeZone('Europe/Warsaw');
 
         $bookingDateInWarsaw = new \DateTimeImmutable(
@@ -24,7 +33,8 @@ final readonly class CreateBookingHandler
         );
 
         $booking = new Booking(
-            $command->serviceId,
+            $service,
+            $client,
             $command->customerName,
             $command->customerEmail,
             $bookingDateInWarsaw

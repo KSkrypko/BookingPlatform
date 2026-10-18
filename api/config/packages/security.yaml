@@ -39,7 +39,7 @@ security:
         - { path: ^/api/login_check$, roles: PUBLIC_ACCESS }
         - { path: ^/api/services$, roles: PUBLIC_ACCESS, methods: [GET] }
         - { path: ^/api/availability$, roles: PUBLIC_ACCESS, methods: [GET] }
-        - { path: ^/api/bookings$, roles: PUBLIC_ACCESS, methods: [GET] }
+        - { path: ^/api/bookings$, roles: IS_AUTHENTICATED_FULLY, methods: [GET] }
         - { path: ^/api/me$, roles: IS_AUTHENTICATED_FULLY }
         - { path: ^/api/services$, roles: ROLE_PROVIDER, methods: [POST] }
         - { path: ^/api/bookings$, roles: ROLE_CLIENT, methods: [POST] }
