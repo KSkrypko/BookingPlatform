@@ -32,7 +32,7 @@ final class RegisterController extends AbstractController
         $accountType = $data['accountType'] ?? null;
 
         if (!is_string($email) || !is_string($password) || !is_string($accountType)) {
-            return $this->json(['message' => 'Missing or invalid required fields.'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['message' => 'Uzupełnij poprawnie wszystkie wymagane pola.'], Response::HTTP_BAD_REQUEST);
         }
 
         $email = mb_strtolower(trim($email));
@@ -41,7 +41,7 @@ final class RegisterController extends AbstractController
 
         if ($password === '' || mb_strlen($password) < 6) {
             return $this->json(
-                ['message' => 'Password must contain at least 6 characters.'],
+                ['message' => 'Hasło musi zawierać co najmniej 6 znaków.'],
                 Response::HTTP_BAD_REQUEST
             );
         }
@@ -53,7 +53,7 @@ final class RegisterController extends AbstractController
         };
 
         if ($roles === null) {
-            return $this->json(['message' => 'Unsupported account type.'], Response::HTTP_BAD_REQUEST);
+            return $this->json(['message' => 'Wybierz prawidłowy typ konta.'], Response::HTTP_BAD_REQUEST);
         }
 
         $existingUser = $entityManager
@@ -61,7 +61,7 @@ final class RegisterController extends AbstractController
             ->findOneBy(['email' => $email]);
 
         if ($existingUser !== null) {
-            return $this->json(['message' => 'User with this email already exists.'], Response::HTTP_CONFLICT);
+            return $this->json(['message' => 'Użytkownik z podanym adresem e-mail już istnieje.'], Response::HTTP_CONFLICT);
         }
 
         $user = new User($email, '', $roles);

@@ -1,3 +1,4 @@
+import { getAuthErrorMessage } from './lib/authErrors';
 import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import AuthScreen from './components/AuthScreen';
@@ -335,7 +336,7 @@ function App() {
 
       setSuccessMessage('Zalogowano pomyślnie.');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Nie udało się zalogować.');
+      setErrorMessage(getAuthErrorMessage(error, 'Nie udało się zalogować.'));
     } finally {
       setAuthLoading(false);
     }
@@ -351,7 +352,7 @@ function App() {
 
       setSuccessMessage('Konto zostało utworzone. Teraz zaloguj się.');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Nie udało się utworzyć konta.');
+      setErrorMessage(getAuthErrorMessage(error, 'Nie udało się utworzyć konta.'));
     } finally {
       setAuthLoading(false);
     }
