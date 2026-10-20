@@ -27,10 +27,20 @@ final readonly class CreateBookingHandler
 
         $warsawTimezone = new \DateTimeZone('Europe/Warsaw');
 
-        $bookingDateInWarsaw = new \DateTimeImmutable(
-            $command->bookingDate,
-            $warsawTimezone
-        );
+        if (!preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\z/', $command->bookingDate)) {
+            throw new \InvalidArgumentException('Termin musi mieć format YYYY-MM-DDTHH:mm:ss w strefie Europe/Warsaw, bez offsetu.');
+        }
+
+        $bookingDateInWarsaw = \DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s', $command->bookingDate, $warsawTimezone);
+        $errors = \DateTimeImmutable::getLastErrors();
+
+        if (
+            $bookingDateInWarsaw === false
+            || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+            || $bookingDateInWarsaw->format('Y-m-d\TH:i:s') !== $command->bookingDate
+        ) {
+            throw new \InvalidArgumentException('Podaj prawidłową datę i godzinę rezerwacji.');
+        }
 
         $booking = new Booking(
             $service,
@@ -40,6 +50,7 @@ final readonly class CreateBookingHandler
             $bookingDateInWarsaw
         );
 
+        $booking->assertBookable();
         $this->bookingRepository->save($booking);
 
         $createdAtInWarsaw = new \DateTimeImmutable(

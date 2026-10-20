@@ -18,7 +18,8 @@ interface BookingRepositoryInterface
     /**
      * @return list<Booking>
      */
-    public function findBetweenBookingDates(
+    public function findOverlappingForProvider(
+        User $provider,
         \DateTimeImmutable $start,
         \DateTimeImmutable $end
     ): array;

@@ -30,7 +30,7 @@ final class AvailabilityCalculatorTest extends TestCase
 
     public function testReturnsEmptySlotsOnSunday(): void
     {
-        $service = new Service('Haircut', null, '50.00', 30);
+        $service = new Service('Haircut', null, '50.00', 30, new User('provider@example.com', 'hash', [User::ROLE_PROVIDER]));
         $bookingRepository = $this->createStub(BookingRepositoryInterface::class);
         $serviceRepository = $this->createStub(ServiceRepositoryInterface::class);
         $serviceRepository->method('findActiveById')->willReturnMap([[1, $service]]);
@@ -46,7 +46,7 @@ final class AvailabilityCalculatorTest extends TestCase
 
     public function testReturnsEmptySlotsForPastDay(): void
     {
-        $service = new Service('Haircut', null, '50.00', 30);
+        $service = new Service('Haircut', null, '50.00', 30, new User('provider@example.com', 'hash', [User::ROLE_PROVIDER]));
         $bookingRepository = $this->createStub(BookingRepositoryInterface::class);
         $serviceRepository = $this->createStub(ServiceRepositoryInterface::class);
         $serviceRepository->method('findActiveById')->willReturnMap([[1, $service]]);
@@ -60,9 +60,9 @@ final class AvailabilityCalculatorTest extends TestCase
 
     public function testGeneratesSlotsRespectingServiceDurationAndBusinessHours(): void
     {
-        $service = new Service('Consultation', null, '100.00', 60);
+        $service = new Service('Consultation', null, '100.00', 60, new User('provider@example.com', 'hash', [User::ROLE_PROVIDER]));
         $bookingRepository = $this->createStub(BookingRepositoryInterface::class);
-        $bookingRepository->method('findBetweenBookingDates')->willReturn([]);
+        $bookingRepository->method('findOverlappingForProvider')->willReturn([]);
         $serviceRepository = $this->createStub(ServiceRepositoryInterface::class);
         $serviceRepository->method('findActiveById')->willReturnMap([[1, $service]]);
 
@@ -89,10 +89,11 @@ final class AvailabilityCalculatorTest extends TestCase
         string $precedingSlot
     ): void
     {
-        $service = new Service('Consultation', null, '100.00', $durationMinutes);
-        $bookedService = new Service('Treatment', null, '150.00', 60);
+        $service = new Service('Consultation', null, '100.00', $durationMinutes, new User('provider@example.com', 'hash', [User::ROLE_PROVIDER]));
+        $bookedService = new Service('Treatment', null, '150.00', 60, $service->getProvider());
         (new \ReflectionProperty(Service::class, 'id'))->setValue($service, 1);
         (new \ReflectionProperty(Service::class, 'id'))->setValue($bookedService, 2);
+        $bookedService->deactivate();
         $day = $this->nextDateForIsoWeekday(1, 14);
 
         $existingBooking = new Booking(
@@ -104,7 +105,7 @@ final class AvailabilityCalculatorTest extends TestCase
         );
 
         $bookingRepository = $this->createStub(BookingRepositoryInterface::class);
-        $bookingRepository->method('findBetweenBookingDates')->willReturn([$existingBooking]);
+        $bookingRepository->method('findOverlappingForProvider')->willReturn([$existingBooking]);
         $serviceRepository = $this->createStub(ServiceRepositoryInterface::class);
         $serviceRepository->method('findActiveById')->willReturnMap([
             [1, $service],
@@ -141,7 +142,7 @@ final class AvailabilityCalculatorTest extends TestCase
 
     private function nextDateForIsoWeekday(int $isoWeekday, int $daysAhead = 1): \DateTimeImmutable
     {
-        $date = new \DateTimeImmutable(sprintf('+%d days', $daysAhead));
+        $date = new \DateTimeImmutable(sprintf('+%d days', $daysAhead), new \DateTimeZone('Europe/Warsaw'));
 
         while ((int) $date->format('N') !== $isoWeekday) {
             $date = $date->modify('+1 day');

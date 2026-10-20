@@ -6,6 +6,7 @@ namespace App\Booking\UI\Http;
 
 use App\Booking\Application\Availability\AvailabilityCalculator;
 use App\Booking\Application\Availability\AvailabilityDayView;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,7 +17,8 @@ final class AvailabilityController extends AbstractController
 {
     #[Route('', name: 'api_availability_day', methods: ['GET'])]
     public function day(
-        AvailabilityCalculator $availabilityCalculator
+        AvailabilityCalculator $availabilityCalculator,
+        LoggerInterface $logger
     ): JsonResponse {
         $serviceId = $this->getRequestServiceId();
         $date = $this->getRequestDate();
@@ -29,15 +31,30 @@ final class AvailabilityController extends AbstractController
         }
 
         try {
+            $day = \DateTimeImmutable::createFromFormat('!Y-m-d', $date, new \DateTimeZone('Europe/Warsaw'));
+            $errors = \DateTimeImmutable::getLastErrors();
+
+            if (
+                $day === false
+                || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))
+                || $day->format('Y-m-d') !== $date
+            ) {
+                throw new \InvalidArgumentException('Podaj prawidłową datę.');
+            }
+
             $slots = $availabilityCalculator->calculateForDay(
                 $serviceId,
-                new \DateTimeImmutable($date)
+                $day
             );
-        } catch (\Throwable $exception) {
+        } catch (\InvalidArgumentException $exception) {
             return $this->json(
                 ['message' => $exception->getMessage()],
                 Response::HTTP_BAD_REQUEST
             );
+        } catch (\Throwable $exception) {
+            $logger->error('Availability calculation failed.', ['exception' => $exception]);
+
+            return $this->json(['message' => 'Nie udało się pobrać dostępności.'], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
 
         return $this->json(
@@ -63,7 +80,7 @@ final class AvailabilityController extends AbstractController
     {
         $value = $this->container->get('request_stack')->getCurrentRequest()?->query->get('date');
 
-        if (!is_string($value) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        if (!is_string($value) || !preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}\z/', $value)) {
             return null;
         }
 

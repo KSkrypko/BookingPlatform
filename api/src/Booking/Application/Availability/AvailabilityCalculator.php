@@ -27,36 +27,32 @@ final readonly class AvailabilityCalculator
             throw new \InvalidArgumentException('Wybrana usługa nie istnieje.');
         }
 
-        $day = $date->setTime(0, 0);
-        $today = new \DateTimeImmutable('today');
+        if ($service->getProvider() === null) {
+            throw new \InvalidArgumentException('Usługa musi być przypisana do usługodawcy.');
+        }
+
+        $timezone = new \DateTimeZone('Europe/Warsaw');
+        $day = $date->setTimezone($timezone)->setTime(0, 0);
+        $today = new \DateTimeImmutable('today', $timezone);
 
         if ($day < $today) {
             return [];
         }
 
-        // niedziela zamknięta
         if ((int) $day->format('N') === 7) {
             return [];
         }
 
         $openAt = $day->setTime(9, 0);
         $closeAt = $day->setTime(17, 0);
-        $now = new \DateTimeImmutable();
+        $now = new \DateTimeImmutable('now', $timezone);
 
-        $existingBookings = $this->bookingRepository->findBetweenBookingDates($openAt, $closeAt);
+        $existingBookings = $this->bookingRepository->findOverlappingForProvider($service->getProvider(), $openAt, $closeAt);
 
         $occupiedIntervals = array_map(
-            function (Booking $booking): array {
-                $bookedService = $this->serviceRepository->findActiveById($booking->getServiceId());
-
-                if ($bookedService === null) {
-                    return [
-                        'start' => $booking->getBookingDate(),
-                        'end' => $booking->getBookingDate()->modify('+15 minutes'),
-                    ];
-                }
-
-                $start = $booking->getBookingDate();
+            static function (Booking $booking) use ($timezone): array {
+                $bookedService = $booking->getService();
+                $start = new \DateTimeImmutable($booking->getBookingDate()->format('Y-m-d H:i:s'), $timezone);
                 $end = $start->modify(sprintf('+%d minutes', $bookedService->getDurationMinutes()));
 
                 return [
