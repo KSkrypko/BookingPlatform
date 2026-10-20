@@ -7,7 +7,9 @@ namespace App\Booking\UI\Http;
 use App\Booking\Application\CreateBooking\CreateBookingCommand;
 use App\Booking\Application\CreateBooking\CreateBookingHandler;
 use App\Booking\Application\GetBookings\GetBookingsHandler;
+use App\Booking\Domain\BookingConflictException;
 use App\User\Domain\User;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -21,7 +23,7 @@ final class BookingController extends AbstractController
 {
     #[Route('', name: 'api_bookings_create', methods: ['POST'])]
     #[IsGranted('ROLE_CLIENT')]
-    public function create(Request $request, CreateBookingHandler $handler, #[CurrentUser] User $user): JsonResponse
+    public function create(Request $request, CreateBookingHandler $handler, LoggerInterface $logger, #[CurrentUser] User $user): JsonResponse
     {
         $data = json_decode($request->getContent(), true);
 
@@ -53,8 +55,14 @@ final class BookingController extends AbstractController
                 ),
                 $user
             );
-        } catch (\Throwable $exception) {
+        } catch (BookingConflictException $exception) {
+            return $this->json(['message' => $exception->getMessage()], Response::HTTP_CONFLICT);
+        } catch (\InvalidArgumentException $exception) {
             return $this->json(['message' => $exception->getMessage()], Response::HTTP_BAD_REQUEST);
+        } catch (\Throwable $exception) {
+            $logger->error('Booking creation failed.', ['exception' => $exception]);
+
+            return $this->json(['message' => 'Nie udało się utworzyć rezerwacji.'], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
 
         return $this->json($booking, Response::HTTP_CREATED);

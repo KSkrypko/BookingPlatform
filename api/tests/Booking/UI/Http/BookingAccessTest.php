@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace App\Tests\Booking\UI\Http;
 
+use App\Booking\Application\Availability\AvailabilityCalculator;
+use App\Booking\Application\CreateBooking\CreateBookingHandler;
 use App\Booking\Domain\Booking;
+use App\Booking\Domain\BookingRepositoryInterface;
 use App\Service\Domain\Service;
+use App\Service\Domain\ServiceRepositoryInterface;
 use App\User\Domain\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
@@ -264,6 +269,245 @@ final class BookingAccessTest extends WebTestCase
 
         $bookings = $this->getBookings($this->firstClient);
         self::assertContains($booking->getId(), array_column($bookings, 'id'));
+    }
+
+    public function testPublicServicesExcludeUnownedAndInactiveServicesAndHaveAvailability(): void
+    {
+        $unowned = new Service('Historical service', null, '100.00', 60);
+        $inactive = new Service('Inactive service', null, '100.00', 60, $this->firstProvider);
+        $inactive->deactivate();
+        $this->entityManager->persist($unowned);
+        $this->entityManager->persist($inactive);
+        $this->entityManager->flush();
+        $this->entityManager->clear();
+
+        $this->browser->request('GET', '/api/services');
+
+        self::assertResponseStatusCodeSame(200);
+        $services = json_decode($this->browser->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertEqualsCanonicalizing(
+            [$this->firstService->getId(), $this->secondService->getId()],
+            array_column($services, 'id')
+        );
+
+        foreach ($services as $service) {
+            $this->browser->request('GET', '/api/availability', ['serviceId' => $service['id'], 'date' => '2030-01-10']);
+
+            self::assertResponseStatusCodeSame(200);
+            $availability = json_decode($this->browser->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
+            self::assertContains('10:00', $availability['slots']);
+        }
+
+        $this->browser->request('GET', '/api/availability', ['serviceId' => $unowned->getId(), 'date' => '2030-01-10']);
+        self::assertResponseStatusCodeSame(400);
+        self::assertSame(4, $this->entityManager->getConnection()->fetchOne('SELECT COUNT(*) FROM services'));
+        $storedUnowned = $this->entityManager->find(Service::class, $unowned->getId());
+        self::assertInstanceOf(Service::class, $storedUnowned);
+        self::assertTrue($storedUnowned->isActive());
+        self::assertNull($storedUnowned->getProvider());
+    }
+
+    public function testAvailabilityUsesIndependentProviderCalendars(): void
+    {
+        $date = $this->firstBooking->getBookingDate()->format('Y-m-d');
+        $this->browser->request('GET', '/api/availability', ['serviceId' => $this->firstService->getId(), 'date' => $date]);
+        self::assertResponseIsSuccessful();
+        $slots = json_decode($this->browser->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR)['slots'];
+        self::assertNotContains('10:00', $slots);
+        self::assertContains('09:00', $slots);
+        self::assertContains('11:00', $slots);
+
+        $this->browser->request('GET', '/api/availability', ['serviceId' => $this->secondService->getId(), 'date' => $date]);
+        self::assertResponseIsSuccessful();
+        $slots = json_decode($this->browser->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR)['slots'];
+        self::assertContains('10:00', $slots);
+    }
+
+    public function testInactiveServicesStillOccupyTheirFullDuration(): void
+    {
+        $otherService = new Service('Other service', null, '100.00', 30, $this->firstProvider);
+        $this->firstService->deactivate();
+        $this->entityManager->persist($otherService);
+        $this->entityManager->flush();
+
+        $this->browser->request('GET', '/api/availability', [
+            'serviceId' => $otherService->getId(),
+            'date' => $this->firstBooking->getBookingDate()->format('Y-m-d'),
+        ]);
+
+        self::assertResponseIsSuccessful();
+        $slots = json_decode($this->browser->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR)['slots'];
+        self::assertNotContains('10:15', $slots);
+        self::assertNotContains('10:45', $slots);
+        self::assertContains('09:30', $slots);
+        self::assertContains('11:00', $slots);
+    }
+
+    public function testAvailabilityIncludesBookingsStartingBeforeTheDay(): void
+    {
+        $longService = new Service('Historical long service', null, '100.00', 18 * 60, $this->firstProvider);
+        $this->entityManager->persist($longService);
+        $this->entityManager->persist(new Booking(
+            $longService,
+            $this->firstClient,
+            'Customer',
+            'customer@example.com',
+            $this->firstBooking->getBookingDate()->modify('-1 day')->setTime(16, 0)
+        ));
+        $this->entityManager->flush();
+
+        $this->browser->request('GET', '/api/availability', [
+            'serviceId' => $this->firstService->getId(),
+            'date' => $this->firstBooking->getBookingDate()->format('Y-m-d'),
+        ]);
+
+        self::assertResponseIsSuccessful();
+        $slots = json_decode($this->browser->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR)['slots'];
+        self::assertNotContains('09:00', $slots);
+        self::assertNotContains('09:45', $slots);
+        self::assertContains('11:00', $slots);
+    }
+
+    public function testConflictsAcrossServicesReturn409AndTouchingBookingsAreAllowed(): void
+    {
+        $otherService = new Service('Other service', null, '100.00', 60, $this->firstProvider);
+        $this->entityManager->persist($otherService);
+        $this->entityManager->flush();
+
+        foreach ([$this->firstService, $otherService] as $service) {
+            $this->postBooking($service, '2030-01-07T10:30:00');
+            self::assertResponseStatusCodeSame(409);
+            self::assertSame(4, $this->entityManager->getConnection()->fetchOne('SELECT COUNT(*) FROM bookings'));
+        }
+
+        foreach (['09:00', '11:00', '16:00'] as $time) {
+            $this->postBooking($otherService, '2030-01-07T' . $time . ':00');
+            self::assertResponseStatusCodeSame(201);
+        }
+
+        $this->postBooking($this->secondService, '2030-01-07T10:00:00');
+        self::assertResponseStatusCodeSame(201);
+    }
+
+    #[DataProvider('invalidDates')]
+    public function testInvalidDatesReturn400WithoutSaving(string $date): void
+    {
+        $this->postBooking($this->firstService, $date);
+
+        self::assertResponseStatusCodeSame(400);
+        self::assertSame(4, $this->entityManager->getConnection()->fetchOne('SELECT COUNT(*) FROM bookings'));
+    }
+
+    public static function invalidDates(): array
+    {
+        return [
+            [''], ['tomorrow'], ['2030-02-30T10:00:00'], ['2030-01-07T10:00:00Z'],
+            ['2030-01-07T10:00:00+01:00'], ['2000-01-03T10:00:00'],
+            ['2030-01-06T10:00:00'], ['2030-01-07T08:45:00'], ['2030-01-07T16:15:00'],
+            ['2030-01-07T10:07:00'], ['2030-01-07T10:00:01'],
+        ];
+    }
+
+    public function testInactiveAndUnownedServicesCannotBeBooked(): void
+    {
+        $unowned = new Service('Historical', null, '100.00', 60);
+        $this->firstService->deactivate();
+        $this->entityManager->persist($unowned);
+        $this->entityManager->flush();
+
+        foreach ([$this->firstService, $unowned] as $service) {
+            $this->postBooking($service, '2030-01-10T10:00:00');
+            self::assertResponseStatusCodeSame(400);
+        }
+        self::assertSame(4, $this->entityManager->getConnection()->fetchOne('SELECT COUNT(*) FROM bookings'));
+    }
+
+    public function testInvalidCalendarDateIsRejectedByAvailability(): void
+    {
+        $this->browser->request('GET', '/api/availability', ['serviceId' => $this->firstService->getId(), 'date' => '2030-02-30']);
+
+        self::assertResponseStatusCodeSame(400);
+    }
+
+    public function testWarsawTimesSurviveReloadWithDifferentPhpTimezone(): void
+    {
+        $timezone = date_default_timezone_get();
+        date_default_timezone_set('UTC');
+
+        try {
+            $year = (int) date('Y') + 1;
+            foreach (['01' => '+01:00', '07' => '+02:00'] as $month => $offset) {
+                $date = (new \DateTimeImmutable($year . '-' . $month . '-01', new \DateTimeZone('Europe/Warsaw')))
+                    ->modify('first monday of this month')->format('Y-m-d');
+                $this->postBooking($this->firstService, $date . 'T10:00:00');
+                self::assertResponseStatusCodeSame(201);
+                $response = json_decode($this->browser->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR);
+                self::assertSame($date . 'T10:00:00' . $offset, $response['bookingDate']);
+                $this->entityManager->clear();
+
+                $this->browser->request('GET', '/api/availability', ['serviceId' => $this->firstService->getId(), 'date' => $date]);
+                self::assertResponseIsSuccessful();
+                $slots = json_decode($this->browser->getResponse()->getContent(), true, 512, JSON_THROW_ON_ERROR)['slots'];
+                self::assertNotContains('10:00', $slots);
+                self::assertContains('11:00', $slots);
+
+                $bookings = $this->getBookings($this->firstClient);
+                $created = array_values(array_filter($bookings, static fn (array $booking): bool => $booking['id'] === $response['id']));
+                self::assertSame($date . 'T10:00:00' . $offset, $created[0]['bookingDate']);
+            }
+        } finally {
+            date_default_timezone_set($timezone);
+        }
+    }
+
+    public function testUnexpectedBookingErrorReturnsSafe500(): void
+    {
+        $services = $this->createStub(ServiceRepositoryInterface::class);
+        $services->method('findActiveById')->willThrowException(new \RuntimeException('SQLSTATE private database details'));
+        self::getContainer()->set(CreateBookingHandler::class, new CreateBookingHandler(
+            $this->createStub(BookingRepositoryInterface::class), $services
+        ));
+
+        $this->postBooking($this->firstService, '2030-01-10T10:00:00');
+
+        self::assertResponseStatusCodeSame(500);
+        self::assertSame(['message' => 'Nie udało się utworzyć rezerwacji.'], json_decode($this->browser->getResponse()->getContent(), true));
+    }
+
+    public function testUnexpectedAvailabilityErrorReturnsSafe500(): void
+    {
+        $bookings = $this->createStub(BookingRepositoryInterface::class);
+        $bookings->method('findOverlappingForProvider')->willThrowException(new \RuntimeException('SQLSTATE private database details'));
+        $services = $this->createStub(ServiceRepositoryInterface::class);
+        $services->method('findActiveById')->willReturn($this->firstService);
+        self::getContainer()->set(AvailabilityCalculator::class, new AvailabilityCalculator($bookings, $services));
+
+        $this->browser->request('GET', '/api/availability', ['serviceId' => $this->firstService->getId(), 'date' => '2030-01-10']);
+
+        self::assertResponseStatusCodeSame(500);
+        self::assertSame(['message' => 'Nie udało się pobrać dostępności.'], json_decode($this->browser->getResponse()->getContent(), true));
+    }
+
+    public function testOnlyClientsCanCreateBookings(): void
+    {
+        $payload = ['serviceId' => $this->firstService->getId(), 'customerName' => 'Customer', 'customerEmail' => 'customer@example.com', 'bookingDate' => '2030-01-10T10:00:00'];
+        $this->browser->jsonRequest('POST', '/api/bookings', $payload);
+        self::assertResponseStatusCodeSame(401);
+
+        $token = self::getContainer()->get(JWTTokenManagerInterface::class)->create($this->firstProvider);
+        $this->browser->jsonRequest('POST', '/api/bookings', $payload, ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(403);
+    }
+
+    private function postBooking(Service $service, string $date): void
+    {
+        $token = self::getContainer()->get(JWTTokenManagerInterface::class)->create($this->firstClient);
+        $this->browser->jsonRequest('POST', '/api/bookings', [
+            'serviceId' => $service->getId(),
+            'customerName' => 'Customer',
+            'customerEmail' => 'customer@example.com',
+            'bookingDate' => $date,
+        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
     }
 
     private function getBookings(User $user, string $query = ''): array

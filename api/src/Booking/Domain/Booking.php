@@ -50,8 +50,30 @@ class Booking
         $this->client = $client;
         $this->setCustomerName($customerName);
         $this->setCustomerEmail($customerEmail);
-        $this->bookingDate = $bookingDate;
+        $this->bookingDate = $bookingDate->setTimezone(new \DateTimeZone('Europe/Warsaw'));
         $this->createdAt = new \DateTimeImmutable('now', new \DateTimeZone('Europe/Warsaw'));
+    }
+
+    public function assertBookable(): void
+    {
+        if (!$this->service->isActive() || $this->service->getProvider() === null) {
+            throw new \InvalidArgumentException('Usługa musi być aktywna i przypisana do usługodawcy.');
+        }
+
+        $start = $this->bookingDate;
+        $now = new \DateTimeImmutable('now', new \DateTimeZone('Europe/Warsaw'));
+        $end = $start->modify(sprintf('+%d minutes', $this->service->getDurationMinutes()));
+
+        if (
+            $start <= $now
+            || (int) $start->format('N') === 7
+            || $start < $start->setTime(9, 0)
+            || $end > $start->setTime(17, 0)
+            || (int) $start->format('i') % 15 !== 0
+            || $start->format('s.u') !== '00.000000'
+        ) {
+            throw new \InvalidArgumentException('Termin musi być przyszły, od poniedziałku do soboty, w godzinach 09:00–17:00, co 15 minut.');
+        }
     }
 
     public function getId(): ?int

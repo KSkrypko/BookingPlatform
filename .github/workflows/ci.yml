@@ -55,12 +55,17 @@ jobs:
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
       - name: Run PHPUnit
-        run: vendor/bin/phpunit --exclude-group migration
+        run: vendor/bin/phpunit --exclude-group migration --exclude-group postgresql
 
       - name: Test PostgreSQL ownership migration
         env:
           MIGRATION_DATABASE_URL: postgresql://booking_test:booking_test@127.0.0.1:5432/booking_platform_migration_test
         run: vendor/bin/phpunit --group migration --fail-on-skipped
+
+      - name: Test PostgreSQL booking concurrency
+        env:
+          BOOKING_DATABASE_URL: postgresql://booking_test:booking_test@127.0.0.1:5432/booking_platform_migration_test
+        run: vendor/bin/phpunit --group postgresql --fail-on-skipped
 
   frontend:
     name: Frontend (React)

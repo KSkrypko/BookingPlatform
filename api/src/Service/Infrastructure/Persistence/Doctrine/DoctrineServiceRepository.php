@@ -25,7 +25,13 @@ final class DoctrineServiceRepository implements ServiceRepositoryInterface
     {
         return $this->entityManager
             ->getRepository(Service::class)
-            ->findBy(['isActive' => true], ['createdAt' => 'DESC']);
+            ->createQueryBuilder('service')
+            ->andWhere('service.isActive = :active')
+            ->andWhere('service.provider IS NOT NULL')
+            ->setParameter('active', true)
+            ->orderBy('service.createdAt', 'DESC')
+            ->getQuery()
+            ->getResult();
     }
 
     public function findActiveById(int $id): ?Service
