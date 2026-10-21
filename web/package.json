@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "tsc --outDir node_modules/.tmp/auth-tests --target ES2023 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck src/lib/authErrors.ts tests/authErrors.test.ts && node --test node_modules/.tmp/auth-tests/tests/authErrors.test.js"
+    "test": "tsc --outDir node_modules/.tmp/tests --target ES2023 --module ESNext --moduleResolution Bundler --types node,vite/client --strict --skipLibCheck tests/*.test.ts && node --test node_modules/.tmp/tests/tests/*.test.js"
   },
   "dependencies": {
     "react": "^19.2.4",
