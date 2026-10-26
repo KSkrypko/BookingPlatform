@@ -72,7 +72,7 @@ class Booking
             || (int) $start->format('i') % 15 !== 0
             || $start->format('s.u') !== '00.000000'
         ) {
-            throw new \InvalidArgumentException('Termin musi być przyszły, od poniedziałku do soboty, w godzinach 09:00–17:00, co 15 minut.');
+            throw new \InvalidArgumentException('Termin musi być przyszły, od poniedziałku do soboty, w godzinach 09:00-17:00, co 15 minut.');
         }
     }
 

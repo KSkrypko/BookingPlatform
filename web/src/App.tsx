@@ -424,32 +424,45 @@ function App() {
   return (
     <div className="app">
       <div className="container">
-        {errorMessage && <Message type="error">{errorMessage}</Message>}
-        {successMessage && <Message type="success">{successMessage}</Message>}
+        <header className="app-header">
+          <div className="app-header__brand">
+            <h1>Booking<span>Platform</span></h1>
+            <span className="app-header__descriptor">Rezerwacje usług</span>
+          </div>
+
+          {authUser ? (
+            <div className="auth-user-box">
+              <div className="auth-user-box__identity">
+                <span className="auth-user-box__email">{authUser.email}</span>
+                <span className="auth-user-box__role">
+                  {authUser.accountType === 'provider' ? 'Usługodawca' : 'Klient'}
+                </span>
+              </div>
+              <button type="button" className="button-secondary" onClick={handleLogout}>
+                Wyloguj
+              </button>
+            </div>
+          ) : <span className="app-header__context">Twoje konto</span>}
+        </header>
 
         {!authUser ? (
           <AuthScreen
             loading={authLoading}
+            feedback={<>
+              {errorMessage && <Message type="error">{errorMessage}</Message>}
+              {successMessage && <Message type="success">{successMessage}</Message>}
+            </>}
+            onModeChange={() => {
+              setErrorMessage('');
+              setSuccessMessage('');
+            }}
             onLogin={handleLogin}
             onRegister={handleRegister}
           />
         ) : (
-          <>
-            <header className="hero">
-              <div className="hero__content hero__content--row">
-                <h1>Booking Platform</h1>
-
-                <div className="auth-user-box">
-                  <span>{authUser.email}</span>
-                  <span className="auth-user-box__role">
-                    {authUser.accountType === 'provider' ? 'Usługodawca' : 'Klient'}
-                  </span>
-                  <button type="button" onClick={handleLogout}>
-                    Wyloguj
-                  </button>
-                </div>
-              </div>
-            </header>
+          <main className="dashboard">
+            {errorMessage && <Message type="error">{errorMessage}</Message>}
+            {successMessage && <Message type="success">{successMessage}</Message>}
 
             {authUser.accountType === 'client' ? (
               <ClientDashboard
@@ -507,7 +520,7 @@ function App() {
                 onSubmit={handleProviderServiceCreate}
               />
             )}
-          </>
+          </main>
         )}
       </div>
     </div>
