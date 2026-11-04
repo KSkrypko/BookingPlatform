@@ -467,6 +467,10 @@ button:disabled {
   border-left: 3px solid var(--color-danger);
 }
 
+.request-error__text {
+  margin: 0 0 var(--space-md);
+}
+
 .dashboard {
   padding-top: var(--space-2xl);
 }
@@ -834,6 +838,11 @@ button:disabled {
   border-color: transparent;
   background: transparent;
   color: var(--color-text-muted);
+}
+
+.calendar-day--available:disabled {
+  border-color: var(--color-focus-ring);
+  background: var(--color-accent-subtle);
 }
 
 .calendar-day--outside:disabled {
