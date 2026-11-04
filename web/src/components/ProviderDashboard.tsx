@@ -5,18 +5,22 @@ import ServiceList from './ServiceList';
 type ProviderDashboardProps = {
   services: Service[];
   loadingServices: boolean;
+  servicesError: string;
+  onRetryServices: () => void;
   providerSubmitting: boolean;
   onSubmit: (payload: {
     name: string;
     description: string | null;
     price: string;
     durationMinutes: number;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
 };
 
 function ProviderDashboard({
   services,
   loadingServices,
+  servicesError,
+  onRetryServices,
   providerSubmitting,
   onSubmit,
 }: ProviderDashboardProps) {
@@ -44,7 +48,7 @@ function ProviderDashboard({
             <p>Usługi dostępne w aplikacji.</p>
           </div>
 
-          <ServiceList services={services} loading={loadingServices} />
+          <ServiceList services={services} loading={loadingServices} error={servicesError} onRetry={onRetryServices} />
         </section>
       </div>
     </div>

@@ -7,7 +7,7 @@ type ProviderServiceFormProps = {
     description: string | null;
     price: string;
     durationMinutes: number;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
 };
 
 function ProviderServiceForm({ loading, onSubmit }: ProviderServiceFormProps) {
@@ -18,13 +18,16 @@ function ProviderServiceForm({ loading, onSubmit }: ProviderServiceFormProps) {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (loading) return;
 
-    await onSubmit({
+    const created = await onSubmit({
       name,
       description: description.trim() === '' ? null : description.trim(),
       price,
       durationMinutes: Number(durationMinutes),
     });
+
+    if (!created) return;
 
     setName('');
     setDescription('');

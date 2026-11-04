@@ -14,6 +14,10 @@ type BookingFormProps = {
   availableSlots: string[];
   loadingAvailableDates: boolean;
   loadingAvailableSlots: boolean;
+  availableDatesError: string;
+  availableSlotsError: string;
+  onRetryAvailableDates: () => void;
+  onRetryAvailableSlots: () => void;
   formErrors: FormErrors;
   submitting: boolean;
   onServiceIdChange: (value: string) => void;
@@ -37,6 +41,10 @@ function BookingForm({
   availableSlots,
   loadingAvailableDates,
   loadingAvailableSlots,
+  availableDatesError,
+  availableSlotsError,
+  onRetryAvailableDates,
+  onRetryAvailableSlots,
   formErrors,
   submitting,
   onServiceIdChange,
@@ -47,6 +55,9 @@ function BookingForm({
   onSelectedTimeChange,
   onSubmit,
 }: BookingFormProps) {
+  const bookingUnavailable = services.length === 0 || loadingAvailableDates || loadingAvailableSlots
+    || Boolean(availableDatesError || availableSlotsError);
+
   return (
     <form onSubmit={onSubmit} className="booking-form" noValidate>
       <label>
@@ -101,6 +112,11 @@ function BookingForm({
           availableSlots={availableSlots}
           loadingAvailableDates={loadingAvailableDates}
           loadingAvailableSlots={loadingAvailableSlots}
+          availableDatesError={availableDatesError}
+          availableSlotsError={availableSlotsError}
+          onRetryAvailableDates={onRetryAvailableDates}
+          onRetryAvailableSlots={onRetryAvailableSlots}
+          serviceSelected={Boolean(serviceId)}
           error={formErrors.bookingDate}
           onMonthChange={onDisplayedMonthChange}
           onDateSelect={onSelectedDateChange}
@@ -108,7 +124,7 @@ function BookingForm({
         />
       </div>
 
-      <button type="submit" disabled={submitting} className="booking-form__submit">
+      <button type="submit" disabled={submitting || bookingUnavailable} className="booking-form__submit">
         {submitting ? 'Zapisywanie...' : 'Utwórz rezerwację'}
       </button>
     </form>

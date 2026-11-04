@@ -5,11 +5,11 @@ import AuthScreen from './components/AuthScreen';
 import ClientDashboard from './components/ClientDashboard';
 import Message from './components/Message';
 import ProviderDashboard from './components/ProviderDashboard';
+import { createAvailabilityLoader } from './lib/availability';
 import {
   clearToken,
   createBooking,
   createService,
-  getAvailability,
   getBookings,
   getMe,
   getServices,
@@ -45,9 +45,13 @@ function isSameMonth(dateString: string, month: Date): boolean {
 }
 
 function App() {
+  const [availabilityLoader] = useState(createAvailabilityLoader);
   const [services, setServices] = useState<Service[]>([]);
+  const [servicesVersion, setServicesVersion] = useState(0);
+  const [servicesError, setServicesError] = useState('');
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [bookingsVersion, setBookingsVersion] = useState(0);
+  const [bookingsError, setBookingsError] = useState('');
   const [serviceId, setServiceId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -57,8 +61,10 @@ function App() {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
-  const [availableDates, setAvailableDates] = useState<string[]>([]);
-  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [monthAvailability, setMonthAvailability] = useState({ key: '', dates: [] as string[], error: '' });
+  const [dayAvailability, setDayAvailability] = useState({ key: '', slots: [] as string[], error: '' });
+  const [availableDatesVersion, setAvailableDatesVersion] = useState(0);
+  const [availableSlotsVersion, setAvailableSlotsVersion] = useState(0);
   const [loadingAvailableDates, setLoadingAvailableDates] = useState(false);
   const [loadingAvailableSlots, setLoadingAvailableSlots] = useState(false);
   const [loadingServices, setLoadingServices] = useState(true);
@@ -70,6 +76,20 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const isClient = authUser?.accountType === 'client';
+  const todayIso = toIsoDate(new Date());
+
+  // Retain results only for the service and period they were fetched for.
+  const monthAvailabilityKey = `${serviceId}:${toIsoDate(displayedMonth)}`;
+  const dayAvailabilityKey = `${serviceId}:${selectedDate}`;
+  const availableDates = monthAvailability.key === monthAvailabilityKey ? monthAvailability.dates : [];
+  const availableDatesError = monthAvailability.key === monthAvailabilityKey ? monthAvailability.error : '';
+  const availableSlots = dayAvailability.key === dayAvailabilityKey ? dayAvailability.slots : [];
+  const availableSlotsError = dayAvailability.key === dayAvailabilityKey ? dayAvailability.error : '';
+  const monthAvailabilityPending = Boolean(serviceId)
+    && (loadingAvailableDates || monthAvailability.key !== monthAvailabilityKey);
+  const dayAvailabilityPending = Boolean(serviceId && selectedDate)
+    && (loadingAvailableSlots || dayAvailability.key !== dayAvailabilityKey);
 
   const bookingDate = useMemo(() => {
     if (!selectedDate || !selectedTime) {
@@ -80,26 +100,37 @@ function App() {
   }, [selectedDate, selectedTime]);
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadData = async () => {
       try {
-        setErrorMessage('');
         setLoadingServices(true);
         const servicesData = await getServices();
 
-        setServices(servicesData);
+        if (cancelled) return;
 
-        if (servicesData.length > 0) {
-          setServiceId((currentValue) => currentValue || String(servicesData[0].id));
+        setServices(servicesData);
+        setServicesError('');
+        setServiceId((currentValue) => servicesData.some((service) => String(service.id) === currentValue)
+          ? currentValue
+          : servicesData.length > 0 ? String(servicesData[0].id) : '');
+      } catch {
+        if (!cancelled) {
+          setServicesError(servicesVersion > 0
+            ? 'Nie udało się odświeżyć katalogu usług. Spróbuj ponownie.'
+            : 'Nie udało się pobrać usług. Spróbuj ponownie.');
         }
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : 'Wystąpił nieznany błąd.');
       } finally {
-        setLoadingServices(false);
+        if (!cancelled) setLoadingServices(false);
       }
     };
 
     void loadData();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [servicesVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,6 +138,7 @@ function App() {
     const loadBookings = async () => {
       if (!authUser || authUser.accountType !== 'client') {
         setBookings([]);
+        setBookingsError('');
         setLoadingBookings(false);
         return;
       }
@@ -117,11 +149,11 @@ function App() {
 
         if (!cancelled) {
           setBookings(bookingsData);
+          setBookingsError('');
         }
-      } catch (error) {
+      } catch {
         if (!cancelled) {
-          setBookings([]);
-          setErrorMessage(error instanceof Error ? error.message : 'Nie udało się pobrać rezerwacji.');
+          setBookingsError('Nie udało się pobrać rezerwacji. Spróbuj ponownie.');
         }
       } finally {
         if (!cancelled) {
@@ -156,8 +188,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!serviceId) {
-      setAvailableDates([]);
+    if (!serviceId || !isClient) {
+      setLoadingAvailableDates(false);
       return;
     }
 
@@ -167,16 +199,10 @@ function App() {
       try {
         setLoadingAvailableDates(true);
 
-        const monthDates = getMonthDates(displayedMonth);
+        const monthDates = getMonthDates(displayedMonth).filter((date) => date >= todayIso);
 
         const results = await Promise.all(
-          monthDates.map(async (date) => {
-            try {
-              return await getAvailability(Number(serviceId), date);
-            } catch {
-              return { date, slots: [] };
-            }
-          }),
+          monthDates.map((date) => availabilityLoader.get(Number(serviceId), date)),
         );
 
         if (cancelled) {
@@ -187,22 +213,17 @@ function App() {
           .filter((item) => item.slots.length > 0)
           .map((item) => item.date);
 
-        setAvailableDates(nextAvailableDates);
+        setMonthAvailability({ key: monthAvailabilityKey, dates: nextAvailableDates, error: '' });
 
-        if (
-          selectedDate &&
-          isSameMonth(selectedDate, displayedMonth) &&
-          !nextAvailableDates.includes(selectedDate)
-        ) {
-          setSelectedDate('');
-          setSelectedTime('');
-          setAvailableSlots([]);
-        }
-      } catch (error) {
+        setSelectedDate((current) => current && isSameMonth(current, displayedMonth)
+          && !nextAvailableDates.includes(current) ? '' : current);
+      } catch {
         if (!cancelled) {
-          setErrorMessage(
-            error instanceof Error ? error.message : 'Nie udało się pobrać dostępnych dni.',
-          );
+          setMonthAvailability((previous) => ({
+            key: monthAvailabilityKey,
+            dates: previous.key === monthAvailabilityKey ? previous.dates : [],
+            error: 'Nie udało się pobrać dostępnych dni. Spróbuj ponownie.',
+          }));
         }
       } finally {
         if (!cancelled) {
@@ -216,12 +237,12 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [serviceId, displayedMonth, selectedDate]);
+  }, [serviceId, displayedMonth, availableDatesVersion, monthAvailabilityKey, isClient, todayIso, availabilityLoader]);
 
   useEffect(() => {
-    if (!serviceId || !selectedDate) {
-      setAvailableSlots([]);
+    if (!serviceId || !selectedDate || !isClient) {
       setSelectedTime('');
+      setLoadingAvailableSlots(false);
       return;
     }
 
@@ -231,23 +252,33 @@ function App() {
       try {
         setLoadingAvailableSlots(true);
 
-        const availability = await getAvailability(Number(serviceId), selectedDate);
+        const availability = await availabilityLoader.get(Number(serviceId), selectedDate);
 
         if (cancelled) {
           return;
         }
 
-        setAvailableSlots(availability.slots);
+        setDayAvailability({ key: dayAvailabilityKey, slots: availability.slots, error: '' });
+        // A day revalidated after cache expiry may have become fully booked.
+        setMonthAvailability((previous) => {
+          if (previous.key !== `${serviceId}:${selectedDate.slice(0, 7)}-01`) return previous;
+          const wasAvailable = previous.dates.includes(selectedDate);
+          const isAvailable = availability.slots.length > 0;
+          if (wasAvailable === isAvailable) return previous;
+          return {
+            ...previous,
+            dates: isAvailable ? [...previous.dates, selectedDate] : previous.dates.filter((date) => date !== selectedDate),
+          };
+        });
 
-        if (selectedTime && !availability.slots.includes(selectedTime)) {
-          setSelectedTime('');
-        }
-      } catch (error) {
+        setSelectedTime((current) => availability.slots.includes(current) ? current : '');
+      } catch {
         if (!cancelled) {
-          setErrorMessage(
-            error instanceof Error ? error.message : 'Nie udało się pobrać dostępnych godzin.',
-          );
-          setAvailableSlots([]);
+          setDayAvailability((previous) => ({
+            key: dayAvailabilityKey,
+            slots: previous.key === dayAvailabilityKey ? previous.slots : [],
+            error: 'Nie udało się pobrać dostępnych godzin. Spróbuj ponownie.',
+          }));
         }
       } finally {
         if (!cancelled) {
@@ -261,23 +292,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [serviceId, selectedDate, selectedTime]);
-
-  const loadServices = async () => {
-    try {
-      setLoadingServices(true);
-      const servicesData = await getServices();
-      setServices(servicesData);
-
-      if (servicesData.length > 0) {
-        setServiceId((currentValue) => currentValue || String(servicesData[0].id));
-      }
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Nie udało się pobrać usług.');
-    } finally {
-      setLoadingServices(false);
-    }
-  };
+  }, [serviceId, selectedDate, availableSlotsVersion, dayAvailabilityKey, isClient, availabilityLoader]);
 
   const validateForm = (): FormErrors => {
     const errors: FormErrors = {};
@@ -320,7 +335,7 @@ function App() {
     setCustomerEmail('');
     setSelectedDate('');
     setSelectedTime('');
-    setAvailableSlots([]);
+    setDayAvailability({ key: '', slots: [], error: '' });
     setFormErrors({});
   };
 
@@ -359,6 +374,7 @@ function App() {
   };
 
   const handleLogout = () => {
+    availabilityLoader.invalidate();
     clearToken();
     setAuthUser(null);
     setBookings([]);
@@ -377,12 +393,14 @@ function App() {
       setErrorMessage('');
       setSuccessMessage('');
 
-      await createService(payload);
-      await loadServices();
-
+      const service = await createService(payload);
+      setServices((current) => [...current, service]);
       setSuccessMessage('Usługa została dodana.');
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Nie udało się dodać usługi.');
+      setServicesVersion((current) => current + 1);
+      return true;
+    } catch {
+      setErrorMessage('Nie udało się dodać usługi. Dane formularza zostały zachowane. Spróbuj ponownie.');
+      return false;
     } finally {
       setProviderSubmitting(false);
     }
@@ -412,7 +430,11 @@ function App() {
       });
 
       setSuccessMessage('Rezerwacja została utworzona.');
+      // Bookings can affect other services owned by the same provider, so clear
+      // every cached service and refresh the visible month from the server.
+      availabilityLoader.invalidate();
       resetForm();
+      setAvailableDatesVersion((currentVersion) => currentVersion + 1);
       setBookingsVersion((currentVersion) => currentVersion + 1);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Wystąpił nieznany błąd.');
@@ -470,6 +492,10 @@ function App() {
                 bookings={bookings}
                 loadingServices={loadingServices}
                 loadingBookings={loadingBookings}
+                servicesError={servicesError}
+                bookingsError={bookingsError}
+                onRetryServices={() => setServicesVersion((current) => current + 1)}
+                onRetryBookings={() => setBookingsVersion((current) => current + 1)}
                 serviceId={serviceId}
                 customerName={customerName}
                 customerEmail={customerEmail}
@@ -478,15 +504,24 @@ function App() {
                 displayedMonth={displayedMonth}
                 availableDates={availableDates}
                 availableSlots={availableSlots}
-                loadingAvailableDates={loadingAvailableDates}
-                loadingAvailableSlots={loadingAvailableSlots}
+                loadingAvailableDates={monthAvailabilityPending}
+                loadingAvailableSlots={dayAvailabilityPending}
+                availableDatesError={availableDatesError}
+                availableSlotsError={availableSlotsError}
+                onRetryAvailableDates={() => {
+                  availabilityLoader.invalidate(Number(serviceId));
+                  setAvailableDatesVersion((current) => current + 1);
+                }}
+                onRetryAvailableSlots={() => {
+                  availabilityLoader.invalidate(Number(serviceId), selectedDate);
+                  setAvailableSlotsVersion((current) => current + 1);
+                }}
                 formErrors={formErrors}
                 submitting={submitting}
                 onServiceIdChange={(value) => {
                   setServiceId(value);
                   setSelectedDate('');
                   setSelectedTime('');
-                  setAvailableSlots([]);
                   clearFieldError('serviceId');
                   clearFieldError('bookingDate');
                 }}
@@ -516,6 +551,8 @@ function App() {
               <ProviderDashboard
                 services={services}
                 loadingServices={loadingServices}
+                servicesError={servicesError}
+                onRetryServices={() => setServicesVersion((current) => current + 1)}
                 providerSubmitting={providerSubmitting}
                 onSubmit={handleProviderServiceCreate}
               />

@@ -9,6 +9,10 @@ type ClientDashboardProps = {
   bookings: Booking[];
   loadingServices: boolean;
   loadingBookings: boolean;
+  servicesError: string;
+  bookingsError: string;
+  onRetryServices: () => void;
+  onRetryBookings: () => void;
   serviceId: string;
   customerName: string;
   customerEmail: string;
@@ -19,6 +23,10 @@ type ClientDashboardProps = {
   availableSlots: string[];
   loadingAvailableDates: boolean;
   loadingAvailableSlots: boolean;
+  availableDatesError: string;
+  availableSlotsError: string;
+  onRetryAvailableDates: () => void;
+  onRetryAvailableSlots: () => void;
   formErrors: FormErrors;
   submitting: boolean;
   onServiceIdChange: (value: string) => void;
@@ -35,6 +43,10 @@ function ClientDashboard({
   bookings,
   loadingServices,
   loadingBookings,
+  servicesError,
+  bookingsError,
+  onRetryServices,
+  onRetryBookings,
   serviceId,
   customerName,
   customerEmail,
@@ -45,6 +57,10 @@ function ClientDashboard({
   availableSlots,
   loadingAvailableDates,
   loadingAvailableSlots,
+  availableDatesError,
+  availableSlotsError,
+  onRetryAvailableDates,
+  onRetryAvailableSlots,
   formErrors,
   submitting,
   onServiceIdChange,
@@ -64,7 +80,7 @@ function ClientDashboard({
             <p>Lista usług, które możesz zarezerwować.</p>
           </div>
 
-          <ServiceList services={services} loading={loadingServices} />
+          <ServiceList services={services} loading={loadingServices} error={servicesError} onRetry={onRetryServices} />
         </section>
 
         <section className="card">
@@ -85,6 +101,10 @@ function ClientDashboard({
             availableSlots={availableSlots}
             loadingAvailableDates={loadingAvailableDates}
             loadingAvailableSlots={loadingAvailableSlots}
+            availableDatesError={availableDatesError}
+            availableSlotsError={availableSlotsError}
+            onRetryAvailableDates={onRetryAvailableDates}
+            onRetryAvailableSlots={onRetryAvailableSlots}
             formErrors={formErrors}
             submitting={submitting}
             onServiceIdChange={onServiceIdChange}
@@ -104,7 +124,7 @@ function ClientDashboard({
           <p>Twoje rezerwacje zapisane w systemie.</p>
         </div>
 
-        <BookingList bookings={bookings} services={services} loading={loadingBookings} />
+        <BookingList bookings={bookings} services={services} loading={loadingBookings} error={bookingsError} onRetry={onRetryBookings} />
       </section>
     </>
   );
